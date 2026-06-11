@@ -33,8 +33,8 @@ async def health_check(request: Request) -> dict:
     }
 
 
-@health_router.get("/ready")
-async def readiness_check(request: Request) -> dict:
+@health_router.get("/ready", response_model=None)
+async def readiness_check(request: Request):
     """就绪检查——判断调度器是否可以接收流量。
 
     Returns:

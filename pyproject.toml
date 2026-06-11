@@ -39,6 +39,8 @@ select = ["E", "F", "I", "N", "W"]
 python_version = "3.11"
 strict = false
 ignore_missing_imports = true
+packages = ["src.dispatcher", "src.shared"]
+explicit_package_bases = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shared", "src/dispatcher"]

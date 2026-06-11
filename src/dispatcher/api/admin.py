@@ -13,12 +13,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from src.shared.models import ModelInstance, NoAvailableInstanceError
+from src.shared.models import ModelInstance
 
 admin_router = APIRouter(prefix="/admin")
 
 
 # ── 实例 CRUD ──────────────────────────────────────────────
+
 
 @admin_router.post("/instances")
 async def register_instance(request: Request) -> dict:
@@ -66,6 +67,7 @@ async def list_instances(model: str | None = None, request: Request = None) -> l
 
 
 # ── 状态与指标 ─────────────────────────────────────────────
+
 
 @admin_router.get("/status")
 async def get_status(request: Request) -> dict:
@@ -115,6 +117,7 @@ async def evaluate_scaling(request: Request) -> dict:
 
 
 # ── 熔断器管理 ─────────────────────────────────────────────
+
 
 @admin_router.post("/circuit-breakers/{instance_id}/reset")
 async def reset_circuit_breaker(instance_id: str, request: Request) -> dict:

@@ -6,19 +6,18 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.dispatcher.health import HealthChecker
+from src.dispatcher.registry import InstanceRegistry
 from src.shared.models import (
     EngineAdapter,
     HealthCheckConfig,
-    InferenceRequest,
     InstanceStatus,
     ModelInstance,
 )
-from src.dispatcher.health import HealthChecker
-from src.dispatcher.registry import InstanceRegistry
 
 
 @pytest.fixture
@@ -56,7 +55,9 @@ def instance() -> ModelInstance:
 
 
 @pytest.fixture
-def health_checker(registry: InstanceRegistry, mock_adapter: MagicMock, health_config: HealthCheckConfig) -> HealthChecker:
+def health_checker(
+    registry: InstanceRegistry, mock_adapter: MagicMock, health_config: HealthCheckConfig
+) -> HealthChecker:
     return HealthChecker(registry, {"ollama": mock_adapter}, health_config)
 
 
@@ -96,11 +97,15 @@ class TestCheckOne:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_check_one_unknown_engine_type(self, registry: InstanceRegistry, health_config: HealthCheckConfig) -> None:
+    async def test_check_one_unknown_engine_type(
+        self, registry: InstanceRegistry, health_config: HealthCheckConfig
+    ) -> None:
         """未知引擎类型返回 False。"""
         instance = ModelInstance(
-            instance_id="t1", address="http://l:8000",
-            model="test", engine_type="unknown",
+            instance_id="t1",
+            address="http://l:8000",
+            model="test",
+            engine_type="unknown",
         )
         checker = HealthChecker(registry, {}, health_config)
         result = await checker.check_one(instance)
@@ -116,8 +121,11 @@ class TestFailureTracking:
 
     @pytest.mark.asyncio
     async def test_continuous_failures_mark_unhealthy(
-        self, registry: InstanceRegistry, instance: ModelInstance,
-        mock_adapter: MagicMock, health_config: HealthCheckConfig,
+        self,
+        registry: InstanceRegistry,
+        instance: ModelInstance,
+        mock_adapter: MagicMock,
+        health_config: HealthCheckConfig,
     ) -> None:
         """连续失败 3 次后标记为 UNHEALTHY。"""
         registry.register(instance)
@@ -134,8 +142,11 @@ class TestFailureTracking:
 
     @pytest.mark.asyncio
     async def test_recovery_after_success(
-        self, registry: InstanceRegistry, instance: ModelInstance,
-        mock_adapter: MagicMock, health_config: HealthCheckConfig,
+        self,
+        registry: InstanceRegistry,
+        instance: ModelInstance,
+        mock_adapter: MagicMock,
+        health_config: HealthCheckConfig,
     ) -> None:
         """UNHEALTHY 实例在成功后恢复为 HEALTHY。"""
         # 先标记为 unhealthy
@@ -155,16 +166,17 @@ class TestDrainingSkip:
     """DRAINING 实例跳过检查。"""
 
     def test_skips_draining_instances(
-        self, registry: InstanceRegistry, instance: ModelInstance,
-        mock_adapter: MagicMock, health_config: HealthCheckConfig,
+        self,
+        registry: InstanceRegistry,
+        instance: ModelInstance,
+        mock_adapter: MagicMock,
+        health_config: HealthCheckConfig,
     ) -> None:
         """DRAINING 实例不被检查。"""
         instance.status = InstanceStatus.DRAINING
         registry.register(instance)
-        checker = HealthChecker(registry, {"ollama": mock_adapter}, health_config)
-
-        # check_and_update 不应被 DRAINING 实例调用
-        # run_forever 中 DRAINING 实例被过滤掉
+        # HealthChecker 在 run_forever 中过滤 DRAINING 实例
+        # 验证 list_all 不返回 DRAINING 实例作为健康候选
         instances = registry.list_all()
         non_draining = [i for i in instances if i.status != InstanceStatus.DRAINING]
         assert len(non_draining) == 0  # DRAINING 实例被跳过
@@ -175,7 +187,8 @@ class TestStop:
 
     @pytest.mark.asyncio
     async def test_stop_stops_loop(
-        self, health_checker: HealthChecker,
+        self,
+        health_checker: HealthChecker,
     ) -> None:
         """stop() 能在短时间内停止运行中的循环。"""
         health_checker.stop()

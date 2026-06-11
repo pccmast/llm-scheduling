@@ -15,8 +15,7 @@ from src.shared.models import InferenceRequest, QueueFullError, QueueItem
 class RequestQueue:
     """带优先级和超时的请求等待队列。"""
 
-    def __init__(self, max_size: int = 100,
-                 max_wait_seconds: float = 30.0) -> None:
+    def __init__(self, max_size: int = 100, max_wait_seconds: float = 30.0) -> None:
         """
         Args:
             max_size: 队列最大容量。满时拒绝新请求。

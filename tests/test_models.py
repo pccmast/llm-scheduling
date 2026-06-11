@@ -12,13 +12,13 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+from src.shared.config import DispatcherSettings, load_config
 from src.shared.models import (
     InferenceRequest,
     QueueItem,
     ScaleConfig,
     TokenUsage,
 )
-from src.shared.config import DispatcherSettings, load_config
 
 
 class TestTokenUsage:

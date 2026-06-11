@@ -10,21 +10,25 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from src.dispatcher.registry import InstanceRegistry
 from src.shared.models import (
     InferenceResponse,
     ModelInstance,
     TokenUsage,
 )
-from src.dispatcher.registry import InstanceRegistry
 
 
 @pytest.fixture
 def registry() -> InstanceRegistry:
     r = InstanceRegistry()
-    r.register(ModelInstance(
-        instance_id="i1", address="http://localhost:8000",
-        model="test-model", engine_type="ollama",
-    ))
+    r.register(
+        ModelInstance(
+            instance_id="i1",
+            address="http://localhost:8000",
+            model="test-model",
+            engine_type="ollama",
+        )
+    )
     return r
 
 
@@ -54,6 +58,7 @@ def client(registry: InstanceRegistry) -> TestClient:
 
 
 # ── Health ──────────────────────────────────────────────────
+
 
 class TestHealth:
     def test_health_returns_ok(self, client: TestClient) -> None:
@@ -89,22 +94,29 @@ class TestReady:
 
 # ── Chat Completions ────────────────────────────────────────
 
+
 class TestChatCompletions:
     def test_chat_completions_success(self, client: TestClient) -> None:
         """正常推理请求返回 200 + OpenAI 格式响应。"""
         mock_proxy = MagicMock()
-        mock_proxy.forward = AsyncMock(return_value=InferenceResponse(
-            request_id="req-1", instance_id="i1",
-            content="Hello!",
-            usage=TokenUsage(prompt_tokens=10, completion_tokens=5),
-            status="ok",
-        ))
+        mock_proxy.forward = AsyncMock(
+            return_value=InferenceResponse(
+                request_id="req-1",
+                instance_id="i1",
+                content="Hello!",
+                usage=TokenUsage(prompt_tokens=10, completion_tokens=5),
+                status="ok",
+            )
+        )
         client.app.state.proxy = mock_proxy
 
-        response = client.post("/v1/chat/completions", json={
-            "model": "test-model",
-            "messages": [{"role": "user", "content": "Hi"}],
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert response.status_code == 200
         data = response.json()
         assert "choices" in data
@@ -118,10 +130,13 @@ class TestChatCompletions:
         mock_proxy.forward = AsyncMock(side_effect=NoAvailableInstanceError("test-model"))
         client.app.state.proxy = mock_proxy
 
-        response = client.post("/v1/chat/completions", json={
-            "model": "test-model",
-            "messages": [{"role": "user", "content": "Hi"}],
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert response.status_code == 503
 
     def test_chat_completions_invalid_json(self, client: TestClient) -> None:
@@ -135,14 +150,21 @@ class TestChatCompletions:
     def test_chat_completions_missing_model(self, client: TestClient) -> None:
         """缺少 model 字段返回 422。"""
         mock_proxy = MagicMock()
-        mock_proxy.forward = AsyncMock(return_value=InferenceResponse(
-            request_id="r1", instance_id="i1", status="error",
-        ))
+        mock_proxy.forward = AsyncMock(
+            return_value=InferenceResponse(
+                request_id="r1",
+                instance_id="i1",
+                status="error",
+            )
+        )
         client.app.state.proxy = mock_proxy
 
-        response = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "Hi"}],
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         # model="" 也会通过 Validation，因为 InferenceRequest.model 是 str，默认 ""
         # 实际上这个测试主要验证缺少字段不会导致 500
         assert response.status_code == 200
@@ -150,26 +172,33 @@ class TestChatCompletions:
 
 # ── Admin ───────────────────────────────────────────────────
 
+
 class TestAdmin:
     def test_register_instance(self, client: TestClient) -> None:
         """注册新实例返回 200。"""
-        response = client.post("/admin/instances", json={
-            "instance_id": "i2",
-            "address": "http://localhost:8001",
-            "model": "test-model",
-            "engine_type": "vllm",
-        })
+        response = client.post(
+            "/admin/instances",
+            json={
+                "instance_id": "i2",
+                "address": "http://localhost:8001",
+                "model": "test-model",
+                "engine_type": "vllm",
+            },
+        )
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
     def test_register_duplicate_instance(self, client: TestClient) -> None:
         """重复 instance_id 返回 409。"""
-        response = client.post("/admin/instances", json={
-            "instance_id": "i1",
-            "address": "http://localhost:8000",
-            "model": "test-model",
-            "engine_type": "ollama",
-        })
+        response = client.post(
+            "/admin/instances",
+            json={
+                "instance_id": "i1",
+                "address": "http://localhost:8000",
+                "model": "test-model",
+                "engine_type": "ollama",
+            },
+        )
         assert response.status_code == 409
 
     def test_register_invalid_data(self, client: TestClient) -> None:

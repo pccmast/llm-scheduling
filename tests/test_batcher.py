@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.shared.models import InferenceRequest, InferenceResponse, TokenUsage
 from src.dispatcher.batcher import DynamicBatcher
+from src.shared.models import InferenceRequest, InferenceResponse, TokenUsage
 
 
 @pytest.fixture
@@ -28,11 +28,15 @@ class TestBatchTrigger:
 
     @pytest.mark.asyncio
     async def test_flush_on_max_batch_size(
-        self, mock_proxy: MagicMock, inference_request: InferenceRequest,
+        self,
+        mock_proxy: MagicMock,
+        inference_request: InferenceRequest,
     ) -> None:
         """达到 max_batch_size 时立即 flush。"""
         mock_proxy.forward.return_value = InferenceResponse(
-            request_id="r1", instance_id="i1", status="ok",
+            request_id="r1",
+            instance_id="i1",
+            status="ok",
             usage=TokenUsage(),
         )
         batcher = DynamicBatcher(mock_proxy, max_batch_size=3, max_wait_ms=5000)
@@ -50,11 +54,15 @@ class TestBatchTrigger:
 
     @pytest.mark.asyncio
     async def test_flush_on_timeout(
-        self, mock_proxy: MagicMock, inference_request: InferenceRequest,
+        self,
+        mock_proxy: MagicMock,
+        inference_request: InferenceRequest,
     ) -> None:
         """未达到 max_batch_size 时等待超时 flush。"""
         mock_proxy.forward.return_value = InferenceResponse(
-            request_id="r1", instance_id="i1", status="ok",
+            request_id="r1",
+            instance_id="i1",
+            status="ok",
             usage=TokenUsage(),
         )
         batcher = DynamicBatcher(mock_proxy, max_batch_size=10, max_wait_ms=50)
@@ -71,11 +79,14 @@ class TestBatchResults:
 
     @pytest.mark.asyncio
     async def test_all_requests_get_response(
-        self, mock_proxy: MagicMock,
+        self,
+        mock_proxy: MagicMock,
     ) -> None:
         """所有请求都收到响应。"""
         mock_proxy.forward.side_effect = lambda req: InferenceResponse(
-            request_id=req.request_id, instance_id="i1", status="ok",
+            request_id=req.request_id,
+            instance_id="i1",
+            status="ok",
             usage=TokenUsage(),
         )
         batcher = DynamicBatcher(mock_proxy, max_batch_size=2, max_wait_ms=5000)
@@ -92,7 +103,8 @@ class TestBatchResults:
 
     @pytest.mark.asyncio
     async def test_forward_error_handled(
-        self, mock_proxy: MagicMock,
+        self,
+        mock_proxy: MagicMock,
     ) -> None:
         """proxy.forward 抛出异常时，对应请求收到异常。"""
         mock_proxy.forward.side_effect = RuntimeError("test error")
@@ -108,11 +120,15 @@ class TestBufferState:
 
     @pytest.mark.asyncio
     async def test_buffer_size_tracking(
-        self, mock_proxy: MagicMock, inference_request: InferenceRequest,
+        self,
+        mock_proxy: MagicMock,
+        inference_request: InferenceRequest,
     ) -> None:
         """buffer_size 正确跟踪。"""
         mock_proxy.forward.return_value = InferenceResponse(
-            request_id="r1", instance_id="i1", status="ok",
+            request_id="r1",
+            instance_id="i1",
+            status="ok",
             usage=TokenUsage(),
         )
         batcher = DynamicBatcher(mock_proxy, max_batch_size=5, max_wait_ms=5000)
@@ -125,7 +141,8 @@ class TestBufferState:
         task.cancel()
 
     def test_total_batches_sent_initially_zero(
-        self, mock_proxy: MagicMock,
+        self,
+        mock_proxy: MagicMock,
     ) -> None:
         batcher = DynamicBatcher(mock_proxy)
         assert batcher.total_batches_sent == 0
@@ -136,7 +153,8 @@ class TestEmptyFlush:
 
     @pytest.mark.asyncio
     async def test_flush_empty_buffer_no_error(
-        self, mock_proxy: MagicMock,
+        self,
+        mock_proxy: MagicMock,
     ) -> None:
         """空 buffer flush 不报错。"""
         batcher = DynamicBatcher(mock_proxy)

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from prometheus_client import CollectorRegistry
 
-from src.shared.models import TokenUsage
 from src.dispatcher.metrics import PrometheusMetricsRecorder
+from src.shared.models import TokenUsage
 
 
 @pytest.fixture
@@ -31,8 +31,9 @@ class TestRecordRequest:
 
     def test_record_multiple_requests(self, recorder: PrometheusMetricsRecorder) -> None:
         for i in range(10):
-            recorder.record_request("inst-1", 100.0 + i * 10, 20.0,
-                                    TokenUsage(prompt_tokens=10, completion_tokens=5), success=True)
+            recorder.record_request(
+                "inst-1", 100.0 + i * 10, 20.0, TokenUsage(prompt_tokens=10, completion_tokens=5), success=True
+            )
         summary = recorder.get_summary()
         assert summary["request_count"] == 10
 
@@ -42,7 +43,15 @@ class TestGetSummary:
         tokens = TokenUsage(prompt_tokens=50, completion_tokens=25)
         recorder.record_request("inst-1", 100.0, 30.0, tokens, success=True)
         summary = recorder.get_summary()
-        for key in ("request_count", "error_count", "avg_latency_ms", "p95_latency_ms", "p99_latency_ms", "queue_depth", "per_instance"):
+        for key in (
+            "request_count",
+            "error_count",
+            "avg_latency_ms",
+            "p95_latency_ms",
+            "p99_latency_ms",
+            "queue_depth",
+            "per_instance",
+        ):
             assert key in summary, f"missing key: {key}"
 
     def test_empty(self, recorder: PrometheusMetricsRecorder) -> None:
@@ -83,8 +92,9 @@ class TestBatchSize:
 class TestPercentiles:
     def test_p95_p99(self, recorder: PrometheusMetricsRecorder) -> None:
         for i in range(100):
-            recorder.record_request("inst-1", float(i + 1), 0.0,
-                                    TokenUsage(prompt_tokens=1, completion_tokens=0), success=True)
+            recorder.record_request(
+                "inst-1", float(i + 1), 0.0, TokenUsage(prompt_tokens=1, completion_tokens=0), success=True
+            )
         summary = recorder.get_summary()
         assert summary["p95_latency_ms"] > 0
         assert summary["p99_latency_ms"] >= summary["p95_latency_ms"]

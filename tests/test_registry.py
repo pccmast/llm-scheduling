@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.shared.models import InstanceStatus, ModelInstance
 from src.dispatcher.registry import InstanceRegistry
+from src.shared.models import InstanceStatus, ModelInstance
 
 
 @pytest.fixture
@@ -39,7 +39,9 @@ class TestRegisterAndGet:
         assert retrieved.model == "llama-3"
         assert retrieved.address == "http://localhost:8000"
 
-    def test_register_duplicate_id_raises_error(self, registry: InstanceRegistry, sample_instance: ModelInstance) -> None:
+    def test_register_duplicate_id_raises_error(
+        self, registry: InstanceRegistry, sample_instance: ModelInstance
+    ) -> None:
         """重复 instance_id 注册时抛出 ValueError。"""
         registry.register(sample_instance)
         with pytest.raises(ValueError, match="already registered"):
@@ -75,9 +77,23 @@ class TestListByModel:
 
     def test_list_by_model_filters_healthy_only(self, registry: InstanceRegistry) -> None:
         """list_by_model 只返回指定模型的 HEALTHY 实例。"""
-        i1 = ModelInstance(instance_id="i1", address="http://a:8000", model="llama-3", engine_type="ollama", status=InstanceStatus.HEALTHY)
-        i2 = ModelInstance(instance_id="i2", address="http://b:8000", model="gpt-4o", engine_type="vllm", status=InstanceStatus.HEALTHY)
-        i3 = ModelInstance(instance_id="i3", address="http://c:8000", model="llama-3", engine_type="tgi", status=InstanceStatus.UNHEALTHY)
+        i1 = ModelInstance(
+            instance_id="i1",
+            address="http://a:8000",
+            model="llama-3",
+            engine_type="ollama",
+            status=InstanceStatus.HEALTHY,
+        )
+        i2 = ModelInstance(
+            instance_id="i2", address="http://b:8000", model="gpt-4o", engine_type="vllm", status=InstanceStatus.HEALTHY
+        )
+        i3 = ModelInstance(
+            instance_id="i3",
+            address="http://c:8000",
+            model="llama-3",
+            engine_type="tgi",
+            status=InstanceStatus.UNHEALTHY,
+        )
 
         registry.register(i1)
         registry.register(i2)
@@ -87,7 +103,9 @@ class TestListByModel:
         assert len(result) == 1
         assert result[0].instance_id == "i1"
 
-    def test_list_by_model_returns_empty_for_unknown_model(self, registry: InstanceRegistry, sample_instance: ModelInstance) -> None:
+    def test_list_by_model_returns_empty_for_unknown_model(
+        self, registry: InstanceRegistry, sample_instance: ModelInstance
+    ) -> None:
         """查询不存在的模型名时返回空列表。"""
         registry.register(sample_instance)
         result = registry.list_by_model("unknown_model")
@@ -95,7 +113,13 @@ class TestListByModel:
 
     def test_list_by_model_returns_empty_for_unhealthy_only(self, registry: InstanceRegistry) -> None:
         """所有匹配模型的实例都不健康时返回空列表。"""
-        i1 = ModelInstance(instance_id="i1", address="http://a:8000", model="llama-3", engine_type="ollama", status=InstanceStatus.UNHEALTHY)
+        i1 = ModelInstance(
+            instance_id="i1",
+            address="http://a:8000",
+            model="llama-3",
+            engine_type="ollama",
+            status=InstanceStatus.UNHEALTHY,
+        )
         registry.register(i1)
         assert registry.list_by_model("llama-3") == []
 
@@ -103,7 +127,9 @@ class TestListByModel:
 class TestStatusUpdate:
     """实例状态更新测试。"""
 
-    def test_mark_unhealthy_excludes_from_list_by_model(self, registry: InstanceRegistry, sample_instance: ModelInstance) -> None:
+    def test_mark_unhealthy_excludes_from_list_by_model(
+        self, registry: InstanceRegistry, sample_instance: ModelInstance
+    ) -> None:
         """unhealthy 实例不出现在 list_by_model 结果中。"""
         registry.register(sample_instance)
         assert len(registry.list_by_model("llama-3")) == 1
@@ -113,7 +139,13 @@ class TestStatusUpdate:
 
     def test_mark_healthy_restores_from_unhealthy(self, registry: InstanceRegistry) -> None:
         """UNHEALTHY 实例可以通过 mark_healthy 恢复。"""
-        i1 = ModelInstance(instance_id="i1", address="http://a:8000", model="llama-3", engine_type="ollama", status=InstanceStatus.UNHEALTHY)
+        i1 = ModelInstance(
+            instance_id="i1",
+            address="http://a:8000",
+            model="llama-3",
+            engine_type="ollama",
+            status=InstanceStatus.UNHEALTHY,
+        )
         registry.register(i1)
         assert len(registry.list_by_model("llama-3")) == 0
 
@@ -122,7 +154,13 @@ class TestStatusUpdate:
 
     def test_mark_healthy_does_not_recover_draining(self, registry: InstanceRegistry) -> None:
         """DRAINING 状态的实例不会被 mark_healthy 恢复为 HEALTHY。"""
-        i1 = ModelInstance(instance_id="i1", address="http://a:8000", model="llama-3", engine_type="ollama", status=InstanceStatus.DRAINING)
+        i1 = ModelInstance(
+            instance_id="i1",
+            address="http://a:8000",
+            model="llama-3",
+            engine_type="ollama",
+            status=InstanceStatus.DRAINING,
+        )
         registry.register(i1)
         registry.mark_healthy("i1")
         # DRAINING 应保持不变
@@ -160,8 +198,12 @@ class TestListAll:
 
     def test_list_all_returns_all_instances(self, registry: InstanceRegistry) -> None:
         """list_all 返回所有实例（包括 unhealthy 和 draining）。"""
-        i1 = ModelInstance(instance_id="i1", address="http://a:8000", model="m1", engine_type="ollama", status=InstanceStatus.HEALTHY)
-        i2 = ModelInstance(instance_id="i2", address="http://b:8000", model="m2", engine_type="vllm", status=InstanceStatus.UNHEALTHY)
+        i1 = ModelInstance(
+            instance_id="i1", address="http://a:8000", model="m1", engine_type="ollama", status=InstanceStatus.HEALTHY
+        )
+        i2 = ModelInstance(
+            instance_id="i2", address="http://b:8000", model="m2", engine_type="vllm", status=InstanceStatus.UNHEALTHY
+        )
         registry.register(i1)
         registry.register(i2)
         all_instances = registry.list_all()

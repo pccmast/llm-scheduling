@@ -71,9 +71,15 @@ class PrometheusMetricsRecorder(MetricsRecorder):
         self._request_count: int = 0
         self._error_count: int = 0
 
-    def record_request(self, instance_id: str, latency_ms: float,
-                       ttft_ms: float, tokens: TokenUsage,
-                       success: bool, queued_ms: float = 0) -> None:
+    def record_request(
+        self,
+        instance_id: str,
+        latency_ms: float,
+        ttft_ms: float,
+        tokens: TokenUsage,
+        success: bool,
+        queued_ms: float = 0,
+    ) -> None:
         status = "success" if success else "error"
         self._requests_total.labels(instance_id=instance_id, status=status).inc()
         self._request_latency_ms.labels(instance_id=instance_id).observe(latency_ms)

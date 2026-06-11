@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-
 # ── 数据模型 fixtures ──────────────────────────────────────
+
 
 @pytest.fixture
 def sample_instance() -> dict:
@@ -69,6 +69,7 @@ def sample_response() -> dict:
 
 
 # ── 实例列表 fixtures ──────────────────────────────────────
+
 
 @pytest.fixture
 def healthy_instances() -> list[dict]:

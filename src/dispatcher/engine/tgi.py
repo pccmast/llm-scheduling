@@ -16,8 +16,7 @@ class TGIAdapter(EngineAdapter):
     def engine_type(self) -> str:
         return "tgi"
 
-    def build_request(self, instance: ModelInstance,
-                      request: InferenceRequest) -> tuple[str, dict, dict]:
+    def build_request(self, instance: ModelInstance, request: InferenceRequest) -> tuple[str, dict, dict]:
         """构建 TGI /generate 请求。
 
         将 messages 列表拼接为单个 prompt 字符串。
@@ -62,8 +61,10 @@ class TGIAdapter(EngineAdapter):
             )
         except Exception:
             return InferenceResponse(
-                request_id="", instance_id="",
-                status="error", error_message="Failed to parse TGI response",
+                request_id="",
+                instance_id="",
+                status="error",
+                error_message="Failed to parse TGI response",
             )
 
     def health_endpoint(self, instance: ModelInstance) -> str:

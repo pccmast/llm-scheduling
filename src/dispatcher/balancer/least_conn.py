@@ -15,8 +15,7 @@ class LeastConnectionsBalancer(LoadBalancer):
         """内部维护 dict[str, int] 记录每个实例的活跃请求数。"""
         self._active: dict[str, int] = {}
 
-    def select(self, candidates: list[ModelInstance],
-               request: InferenceRequest) -> ModelInstance:
+    def select(self, candidates: list[ModelInstance], request: InferenceRequest) -> ModelInstance:
         """选择 active_count 最小的候选实例。
         活跃数相同时选择 candidates 中第一个（即与已有活跃计数无关的实例中第一个）。
 
@@ -30,13 +29,11 @@ class LeastConnectionsBalancer(LoadBalancer):
         best = min(candidates, key=lambda inst: self._active.get(inst.instance_id, 0))
         return best
 
-    def on_request_start(self, instance_id: str,
-                         request: InferenceRequest | None = None) -> None:
+    def on_request_start(self, instance_id: str, request: InferenceRequest | None = None) -> None:
         """活跃请求数 +1。"""
         self._active[instance_id] = self._active.get(instance_id, 0) + 1
 
-    def on_request_end(self, instance_id: str,
-                       request: InferenceRequest | None = None) -> None:
+    def on_request_end(self, instance_id: str, request: InferenceRequest | None = None) -> None:
         """活跃请求数 -1（最小为 0）。"""
         if instance_id in self._active:
             self._active[instance_id] = max(0, self._active[instance_id] - 1)

@@ -13,22 +13,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 
+from src.dispatcher.balancer import create_balancer
+from src.dispatcher.batcher import DynamicBatcher
+from src.dispatcher.circuit_breaker import CircuitBreakerConfig, CircuitBreakerRegistry
+from src.dispatcher.engine import create_adapter_registry
+from src.dispatcher.health import HealthChecker
+from src.dispatcher.metrics import PrometheusMetricsRecorder
+from src.dispatcher.proxy import RoutingProxy
+from src.dispatcher.queue import RequestQueue
+from src.dispatcher.registry import InstanceRegistry
+from src.dispatcher.scaler import AutoScaler
 from src.shared.config import load_config, load_yaml_config
-from src.shared.logging import setup_logging, get_logger
+from src.shared.logging import get_logger, setup_logging
 from src.shared.models import (
     HealthCheckConfig,
     ScaleConfig,
 )
-from src.dispatcher.registry import InstanceRegistry
-from src.dispatcher.balancer import create_balancer
-from src.dispatcher.engine import create_adapter_registry
-from src.dispatcher.health import HealthChecker
-from src.dispatcher.proxy import RoutingProxy
-from src.dispatcher.circuit_breaker import CircuitBreakerConfig, CircuitBreakerRegistry
-from src.dispatcher.metrics import PrometheusMetricsRecorder
-from src.dispatcher.queue import RequestQueue
-from src.dispatcher.batcher import DynamicBatcher
-from src.dispatcher.scaler import AutoScaler
 
 logger = get_logger(__name__)
 
@@ -67,14 +67,13 @@ async def lifespan(app: FastAPI):
 
     # 6. Routing Proxy
     circuit_breakers_map = {
-        inst.instance_id: cb_registry.get_or_create(inst.instance_id)
-        for inst in registry.list_all()
+        inst.instance_id: cb_registry.get_or_create(inst.instance_id) for inst in registry.list_all()
     }
     proxy = RoutingProxy(
         registry=registry,
         balancer=balancer,
         engine_adapters=engine_adapters,
-        circuit_breakers=circuit_breakers_map,
+        circuit_breakers=circuit_breakers_map,  # type: ignore[arg-type]
         metrics=metrics,
         timeout=settings.upstream_timeout,
     )
@@ -146,9 +145,9 @@ def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用。"""
     app = FastAPI(title="LLM Inference Dispatcher", version="0.2.0", lifespan=lifespan)
 
+    from src.dispatcher.api.admin import admin_router
     from src.dispatcher.api.health import health_router
     from src.dispatcher.api.inference import inference_router
-    from src.dispatcher.api.admin import admin_router
 
     app.include_router(health_router)
     app.include_router(inference_router)

@@ -10,6 +10,9 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from src.dispatcher.engine.ollama import OllamaAdapter
+from src.dispatcher.proxy import RoutingProxy
+from src.dispatcher.registry import InstanceRegistry
 from src.shared.models import (
     CircuitBreaker,
     InferenceRequest,
@@ -18,22 +21,27 @@ from src.shared.models import (
     ModelInstance,
     NoAvailableInstanceError,
 )
-from src.dispatcher.proxy import RoutingProxy
-from src.dispatcher.registry import InstanceRegistry
-from src.dispatcher.engine.ollama import OllamaAdapter
 
 
 @pytest.fixture
 def registry() -> InstanceRegistry:
     r = InstanceRegistry()
-    r.register(ModelInstance(
-        instance_id="i1", address="http://localhost:8000",
-        model="test-model", engine_type="ollama",
-    ))
-    r.register(ModelInstance(
-        instance_id="i2", address="http://localhost:8001",
-        model="test-model", engine_type="ollama",
-    ))
+    r.register(
+        ModelInstance(
+            instance_id="i1",
+            address="http://localhost:8000",
+            model="test-model",
+            engine_type="ollama",
+        )
+    )
+    r.register(
+        ModelInstance(
+            instance_id="i2",
+            address="http://localhost:8001",
+            model="test-model",
+            engine_type="ollama",
+        )
+    )
     return r
 
 
@@ -41,8 +49,10 @@ def registry() -> InstanceRegistry:
 def balancer() -> MagicMock:
     b = MagicMock(spec=LoadBalancer)
     b.select.return_value = ModelInstance(
-        instance_id="i1", address="http://localhost:8000",
-        model="test-model", engine_type="ollama",
+        instance_id="i1",
+        address="http://localhost:8000",
+        model="test-model",
+        engine_type="ollama",
     )
     return b
 
@@ -55,7 +65,8 @@ def adapter() -> OllamaAdapter:
 @pytest.fixture
 def inference_request() -> InferenceRequest:
     return InferenceRequest(
-        request_id="req-1", model="test-model",
+        request_id="req-1",
+        model="test-model",
         messages=[{"role": "user", "content": "Hello"}],
     )
 
@@ -107,12 +118,16 @@ class TestForwardSuccess:
 
     @pytest.mark.asyncio
     async def test_forward_calls_balancer_callbacks(
-        self, proxy: RoutingProxy, balancer: MagicMock, inference_request: InferenceRequest,
+        self,
+        proxy: RoutingProxy,
+        balancer: MagicMock,
+        inference_request: InferenceRequest,
     ) -> None:
         """on_request_start 和 on_request_end 被成对调用。"""
         mock_response = {
             "message": {"role": "assistant", "content": "Hi!"},
-            "eval_count": 5, "prompt_eval_count": 2,
+            "eval_count": 5,
+            "prompt_eval_count": 2,
         }
         mock_client = _mock_httpx_post(mock_response)
 
@@ -164,7 +179,10 @@ class TestForwardErrors:
 
     @pytest.mark.asyncio
     async def test_callbacks_called_on_error(
-        self, proxy: RoutingProxy, balancer: MagicMock, inference_request: InferenceRequest,
+        self,
+        proxy: RoutingProxy,
+        balancer: MagicMock,
+        inference_request: InferenceRequest,
     ) -> None:
         """即使上游报错，on_request_start 和 on_request_end 仍然成对调用。"""
         mock_client = MagicMock()
@@ -186,31 +204,46 @@ class TestCircuitBreaker:
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_open_skips_instance(
-        self, registry: InstanceRegistry, adapter: OllamaAdapter, inference_request: InferenceRequest,
+        self,
+        registry: InstanceRegistry,
+        adapter: OllamaAdapter,
+        inference_request: InferenceRequest,
     ) -> None:
         """熔断器 OPEN 的实例被跳过。"""
+
         class OpenCB(CircuitBreaker):
-            def allow_request(self) -> bool: return False
-            def record_success(self) -> None: pass
-            def record_failure(self) -> None: pass
+            def allow_request(self) -> bool:
+                return False
+
+            def record_success(self) -> None:
+                pass
+
+            def record_failure(self) -> None:
+                pass
+
             @property
-            def state(self) -> str: return "open"
+            def state(self) -> str:
+                return "open"
 
         balancer = MagicMock(spec=LoadBalancer)
         balancer.select.return_value = ModelInstance(
-            instance_id="i2", address="http://localhost:8001",
-            model="test-model", engine_type="ollama",
+            instance_id="i2",
+            address="http://localhost:8001",
+            model="test-model",
+            engine_type="ollama",
         )
 
         proxy = RoutingProxy(
-            registry=registry, balancer=balancer,
+            registry=registry,
+            balancer=balancer,
             engine_adapters={"ollama": adapter},
             circuit_breakers={"i1": OpenCB()},
         )
 
         mock_response = {
             "message": {"role": "assistant", "content": "OK"},
-            "eval_count": 1, "prompt_eval_count": 1,
+            "eval_count": 1,
+            "prompt_eval_count": 1,
         }
         mock_client = _mock_httpx_post(mock_response)
 
@@ -221,19 +254,31 @@ class TestCircuitBreaker:
 
     @pytest.mark.asyncio
     async def test_all_circuit_breakers_open_raises_error(
-        self, registry: InstanceRegistry, adapter: OllamaAdapter, inference_request: InferenceRequest,
+        self,
+        registry: InstanceRegistry,
+        adapter: OllamaAdapter,
+        inference_request: InferenceRequest,
     ) -> None:
         """全部熔断器 OPEN 时抛出 NoAvailableInstanceError。"""
+
         class OpenCB(CircuitBreaker):
-            def allow_request(self) -> bool: return False
-            def record_success(self) -> None: pass
-            def record_failure(self) -> None: pass
+            def allow_request(self) -> bool:
+                return False
+
+            def record_success(self) -> None:
+                pass
+
+            def record_failure(self) -> None:
+                pass
+
             @property
-            def state(self) -> str: return "open"
+            def state(self) -> str:
+                return "open"
 
         balancer = MagicMock(spec=LoadBalancer)
         proxy = RoutingProxy(
-            registry=registry, balancer=balancer,
+            registry=registry,
+            balancer=balancer,
             engine_adapters={"ollama": adapter},
             circuit_breakers={"i1": OpenCB(), "i2": OpenCB()},
         )
@@ -247,24 +292,32 @@ class TestMetrics:
 
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_success(
-        self, registry: InstanceRegistry, adapter: OllamaAdapter, inference_request: InferenceRequest,
+        self,
+        registry: InstanceRegistry,
+        adapter: OllamaAdapter,
+        inference_request: InferenceRequest,
     ) -> None:
         """成功时 metrics.record_request() 被调用。"""
         balancer = MagicMock(spec=LoadBalancer)
         balancer.select.return_value = ModelInstance(
-            instance_id="i1", address="http://localhost:8000",
-            model="test-model", engine_type="ollama",
+            instance_id="i1",
+            address="http://localhost:8000",
+            model="test-model",
+            engine_type="ollama",
         )
         mock_metrics = MagicMock(spec=MetricsRecorder)
 
         proxy = RoutingProxy(
-            registry=registry, balancer=balancer,
-            engine_adapters={"ollama": adapter}, metrics=mock_metrics,
+            registry=registry,
+            balancer=balancer,
+            engine_adapters={"ollama": adapter},
+            metrics=mock_metrics,
         )
 
         mock_response = {
             "message": {"role": "assistant", "content": "OK"},
-            "eval_count": 5, "prompt_eval_count": 2,
+            "eval_count": 5,
+            "prompt_eval_count": 2,
         }
         mock_client = _mock_httpx_post(mock_response)
 

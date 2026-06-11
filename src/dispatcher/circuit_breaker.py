@@ -15,9 +15,10 @@ from src.shared.models import CircuitBreaker
 
 class CircuitBreakerConfig(BaseModel):
     """单个熔断器的配置。"""
-    failure_threshold: int = 5          # 连续失败 N 次后打开熔断器
-    recovery_timeout: float = 30.0      # OPEN 状态持续多久后进入 HALF_OPEN（秒）
-    half_open_max_calls: int = 1        # HALF_OPEN 状态允许的最大试探请求数
+
+    failure_threshold: int = 5  # 连续失败 N 次后打开熔断器
+    recovery_timeout: float = 30.0  # OPEN 状态持续多久后进入 HALF_OPEN（秒）
+    half_open_max_calls: int = 1  # HALF_OPEN 状态允许的最大试探请求数
 
 
 class InstanceCircuitBreaker(CircuitBreaker):
@@ -30,8 +31,7 @@ class InstanceCircuitBreaker(CircuitBreaker):
     _OPEN = "open"
     _HALF_OPEN = "half_open"
 
-    def __init__(self, instance_id: str,
-                 config: CircuitBreakerConfig | None = None) -> None:
+    def __init__(self, instance_id: str, config: CircuitBreakerConfig | None = None) -> None:
         """
         Args:
             instance_id: 关联的实例 ID。
@@ -44,8 +44,8 @@ class InstanceCircuitBreaker(CircuitBreaker):
         self._config = config or CircuitBreakerConfig()
         self._state: str = self._CLOSED
         self._failure_count: int = 0
-        self._success_count: int = 0     # HALF_OPEN 状态下的成功计数
-        self._opened_at: float = 0.0     # 进入 OPEN 状态的时间
+        self._success_count: int = 0  # HALF_OPEN 状态下的成功计数
+        self._opened_at: float = 0.0  # 进入 OPEN 状态的时间
         self._half_open_requests: int = 0  # HALF_OPEN 状态下已发送的试探请求数
 
     def allow_request(self) -> bool:

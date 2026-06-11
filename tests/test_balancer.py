@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import pytest
 
-from src.shared.models import InferenceRequest, ModelInstance
 from src.dispatcher.balancer import create_balancer
-from src.dispatcher.balancer.round_robin import RoundRobinBalancer
 from src.dispatcher.balancer.least_conn import LeastConnectionsBalancer
+from src.dispatcher.balancer.round_robin import RoundRobinBalancer
 from src.dispatcher.balancer.weighted import WeightedBalancer
+from src.shared.models import InferenceRequest, ModelInstance
 
 
 @pytest.fixture
@@ -30,10 +30,13 @@ def candidates() -> list[ModelInstance]:
 
 # ── RoundRobinBalancer ──────────────────────────────────────
 
+
 class TestRoundRobinBalancer:
     """轮询负载均衡策略测试。"""
 
-    def test_round_robin_distribution(self, inference_request: InferenceRequest, candidates: list[ModelInstance]) -> None:
+    def test_round_robin_distribution(
+        self, inference_request: InferenceRequest, candidates: list[ModelInstance]
+    ) -> None:
         """3 个实例连续 6 次 select，每个实例被选中 2 次。"""
         balancer = RoundRobinBalancer()
         counts: dict[str, int] = {}
@@ -62,10 +65,13 @@ class TestRoundRobinBalancer:
 
 # ── LeastConnectionsBalancer ────────────────────────────────
 
+
 class TestLeastConnectionsBalancer:
     """最少连接负载均衡策略测试。"""
 
-    def test_select_least_active_instance(self, inference_request: InferenceRequest, candidates: list[ModelInstance]) -> None:
+    def test_select_least_active_instance(
+        self, inference_request: InferenceRequest, candidates: list[ModelInstance]
+    ) -> None:
         """选择活跃连接数最少的实例。"""
         balancer = LeastConnectionsBalancer()
         # 模拟不同活跃数
@@ -123,6 +129,7 @@ class TestLeastConnectionsBalancer:
 
 # ── create_balancer 工厂函数 ───────────────────────────────
 
+
 class TestCreateBalancer:
     """负载均衡器工厂函数测试。"""
 
@@ -149,6 +156,7 @@ class TestCreateBalancer:
 
 # ── WeightedBalancer ────────────────────────────────────────
 
+
 class TestWeightedBalancer:
     """加权负载均衡策略测试。"""
 
@@ -161,13 +169,18 @@ class TestWeightedBalancer:
         balancer._loads["i2"] = 50.0
 
         req = InferenceRequest(
-            request_id="r1", model="test",
+            request_id="r1",
+            model="test",
             messages=[{"role": "user", "content": "x" * 400}],
             max_tokens=200,
         )
         candidates = [
-            ModelInstance(instance_id="i1", address="http://a:8000", model="test", engine_type="ollama", capacity_factor=1.0),
-            ModelInstance(instance_id="i2", address="http://b:8000", model="test", engine_type="vllm", capacity_factor=1.0),
+            ModelInstance(
+                instance_id="i1", address="http://a:8000", model="test", engine_type="ollama", capacity_factor=1.0
+            ),
+            ModelInstance(
+                instance_id="i2", address="http://b:8000", model="test", engine_type="vllm", capacity_factor=1.0
+            ),
         ]
         inst = balancer.select(candidates, req)
         assert inst.instance_id == "i2"
@@ -181,13 +194,18 @@ class TestWeightedBalancer:
         balancer._loads["i2"] = 80.0
 
         req = InferenceRequest(
-            request_id="r1", model="test",
+            request_id="r1",
+            model="test",
             messages=[{"role": "user", "content": "x" * 400}],
             max_tokens=200,
         )
         candidates = [
-            ModelInstance(instance_id="i1", address="http://a:8000", model="test", engine_type="ollama", capacity_factor=2.0),
-            ModelInstance(instance_id="i2", address="http://b:8000", model="test", engine_type="vllm", capacity_factor=1.0),
+            ModelInstance(
+                instance_id="i1", address="http://a:8000", model="test", engine_type="ollama", capacity_factor=2.0
+            ),
+            ModelInstance(
+                instance_id="i2", address="http://b:8000", model="test", engine_type="vllm", capacity_factor=1.0
+            ),
         ]
         inst = balancer.select(candidates, req)
         assert inst.instance_id == "i1"
@@ -202,7 +220,8 @@ class TestWeightedBalancer:
         """on_request_start/end 使用 request.estimated_weight。"""
         balancer = WeightedBalancer()
         req = InferenceRequest(
-            request_id="r1", model="test",
+            request_id="r1",
+            model="test",
             messages=[{"role": "user", "content": "x" * 400}],
             max_tokens=200,
         )
@@ -219,7 +238,8 @@ class TestWeightedBalancer:
     def test_on_request_end_does_not_go_below_zero(self) -> None:
         balancer = WeightedBalancer()
         req = InferenceRequest(
-            request_id="r1", model="test",
+            request_id="r1",
+            model="test",
             messages=[{"role": "user", "content": "x" * 400}],
             max_tokens=200,
         )

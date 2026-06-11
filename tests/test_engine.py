@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.shared.models import InferenceRequest, ModelInstance
 from src.dispatcher.engine.ollama import OllamaAdapter
+from src.shared.models import InferenceRequest, ModelInstance
 
 
 @pytest.fixture
@@ -48,15 +48,21 @@ class TestOllamaAdapterProperties:
 class TestOllamaBuildRequest:
     """build_request 测试。"""
 
-    def test_build_request_url(self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest) -> None:
+    def test_build_request_url(
+        self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest
+    ) -> None:
         url, headers, body = adapter.build_request(instance, inference_request)
         assert url == "http://localhost:11434/api/chat"
 
-    def test_build_request_headers(self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest) -> None:
+    def test_build_request_headers(
+        self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest
+    ) -> None:
         _, headers, _ = adapter.build_request(instance, inference_request)
         assert headers["Content-Type"] == "application/json"
 
-    def test_build_request_body(self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest) -> None:
+    def test_build_request_body(
+        self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest
+    ) -> None:
         _, _, body = adapter.build_request(instance, inference_request)
         assert body["model"] == "llama-3"
         assert body["messages"] == [{"role": "user", "content": "Hello"}]
@@ -64,7 +70,9 @@ class TestOllamaBuildRequest:
         assert body["options"]["temperature"] == 0.7
         assert body["options"]["num_predict"] == 500
 
-    def test_build_request_with_trailing_slash(self, adapter: OllamaAdapter, inference_request: InferenceRequest) -> None:
+    def test_build_request_with_trailing_slash(
+        self, adapter: OllamaAdapter, inference_request: InferenceRequest
+    ) -> None:
         instance = ModelInstance(
             instance_id="ollama-1",
             address="http://localhost:11434/",
@@ -76,8 +84,10 @@ class TestOllamaBuildRequest:
 
     def test_build_request_stream(self, adapter: OllamaAdapter, instance: ModelInstance) -> None:
         req = InferenceRequest(
-            request_id="req-2", model="llama-3",
-            messages=[{"role": "user", "content": "Hi"}], stream=True,
+            request_id="req-2",
+            model="llama-3",
+            messages=[{"role": "user", "content": "Hi"}],
+            stream=True,
         )
         _, _, body = adapter.build_request(instance, req)
         assert body["stream"] is True
@@ -136,7 +146,9 @@ class TestOllamaHealthEndpoint:
 
     def test_health_endpoint_with_trailing_slash(self, adapter: OllamaAdapter) -> None:
         instance = ModelInstance(
-            instance_id="o1", address="http://localhost:11434/",
-            model="llama-3", engine_type="ollama",
+            instance_id="o1",
+            address="http://localhost:11434/",
+            model="llama-3",
+            engine_type="ollama",
         )
         assert adapter.health_endpoint(instance) == "http://localhost:11434/api/tags"

@@ -70,9 +70,7 @@ class InstanceRegistry:
             如果没有匹配实例，返回空列表。
         """
         return [
-            inst
-            for inst in self._instances.values()
-            if inst.model == model and inst.status == InstanceStatus.HEALTHY
+            inst for inst in self._instances.values() if inst.model == model and inst.status == InstanceStatus.HEALTHY
         ]
 
     def update_status(self, instance_id: str, status: InstanceStatus) -> None:

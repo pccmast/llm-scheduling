@@ -16,8 +16,7 @@ class VLLMAdapter(EngineAdapter):
     def engine_type(self) -> str:
         return "vllm"
 
-    def build_request(self, instance: ModelInstance,
-                      request: InferenceRequest) -> tuple[str, dict, dict]:
+    def build_request(self, instance: ModelInstance, request: InferenceRequest) -> tuple[str, dict, dict]:
         """构建 vLLM /v1/chat/completions 请求（OpenAI 兼容格式）。
 
         Returns:
@@ -59,8 +58,10 @@ class VLLMAdapter(EngineAdapter):
             )
         except Exception:
             return InferenceResponse(
-                request_id="", instance_id="",
-                status="error", error_message="Failed to parse vLLM response",
+                request_id="",
+                instance_id="",
+                status="error",
+                error_message="Failed to parse vLLM response",
             )
 
     def health_endpoint(self, instance: ModelInstance) -> str:

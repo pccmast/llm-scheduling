@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
-from src.shared.models import InferenceRequest, QueueFullError
 from src.dispatcher.queue import RequestQueue
+from src.shared.models import InferenceRequest, QueueFullError
 
 
 @pytest.fixture

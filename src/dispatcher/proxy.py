@@ -13,6 +13,7 @@ from typing import Optional
 
 import httpx
 
+from src.dispatcher.registry import InstanceRegistry
 from src.shared.models import (
     CircuitBreaker,
     EngineAdapter,
@@ -24,19 +25,20 @@ from src.shared.models import (
     NoAvailableInstanceError,
     TokenUsage,
 )
-from src.dispatcher.registry import InstanceRegistry
 
 
 class RoutingProxy:
     """请求路由与转发引擎。"""
 
-    def __init__(self,
-                 registry: InstanceRegistry,
-                 balancer: LoadBalancer,
-                 engine_adapters: dict[str, EngineAdapter],
-                 circuit_breakers: dict[str, CircuitBreaker] | None = None,
-                 metrics: MetricsRecorder | None = None,
-                 timeout: float = 120.0) -> None:
+    def __init__(
+        self,
+        registry: InstanceRegistry,
+        balancer: LoadBalancer,
+        engine_adapters: dict[str, EngineAdapter],
+        circuit_breakers: dict[str, CircuitBreaker] | None = None,
+        metrics: MetricsRecorder | None = None,
+        timeout: float = 120.0,
+    ) -> None:
         """
         Args:
             registry: 实例注册表。
@@ -219,7 +221,7 @@ class RoutingProxy:
             async with client.stream("POST", url, json=body, headers=headers, timeout=self._timeout) as response:
                 async for line in response.aiter_lines():
                     if not ttft_recorded and line.startswith("data:") and "content" in line:
-                        ttft_ms = (time.monotonic() - start_time) * 1000
+                        _ttft_ms = (time.monotonic() - start_time) * 1000
                         ttft_recorded = True
 
                     yield line + "\n"
@@ -241,9 +243,11 @@ class RoutingProxy:
         except NoAvailableInstanceError:
             raise
         except Exception as exc:
-            error_event = json.dumps({
-                "error": {"message": str(exc), "type": type(exc).__name__},
-            })
+            error_event = json.dumps(
+                {
+                    "error": {"message": str(exc), "type": type(exc).__name__},
+                }
+            )
             yield f"data: {error_event}\n\n"
             yield "data: [DONE]\n\n"
             if instance:
@@ -252,7 +256,11 @@ class RoutingProxy:
                     cb.record_failure()
             if self._metrics and instance:
                 self._metrics.record_request(
-                    instance.instance_id, 0, 0, usage, success=False,
+                    instance.instance_id,
+                    0,
+                    0,
+                    usage,
+                    success=False,
                 )
         finally:
             if instance:
@@ -263,7 +271,8 @@ class RoutingProxy:
         if not self._circuit_breakers:
             return candidates
         return [
-            inst for inst in candidates
+            inst
+            for inst in candidates
             if self._circuit_breakers.get(inst.instance_id) is None
             or self._circuit_breakers[inst.instance_id].allow_request()
         ]
@@ -275,10 +284,13 @@ class RoutingProxy:
             raise NoAvailableInstanceError(instance.model)
         return adapter
 
-    def _record_failure(self, instance: Optional[ModelInstance],
-                        error_resp: InferenceResponse,
-                        request: InferenceRequest,
-                        start_time: float) -> None:
+    def _record_failure(
+        self,
+        instance: Optional[ModelInstance],
+        error_resp: InferenceResponse,
+        request: InferenceRequest,
+        start_time: float,
+    ) -> None:
         """记录失败的请求（熔断器 + 指标）。"""
         if instance:
             cb = self._circuit_breakers.get(instance.instance_id)

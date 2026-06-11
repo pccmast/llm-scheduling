@@ -15,8 +15,8 @@ def create_adapter_registry() -> dict[str, EngineAdapter]:
         {"ollama": OllamaAdapter(), "vllm": VLLMAdapter(), "tgi": TGIAdapter()}
     """
     from src.dispatcher.engine.ollama import OllamaAdapter
-    from src.dispatcher.engine.vllm import VLLMAdapter
     from src.dispatcher.engine.tgi import TGIAdapter
+    from src.dispatcher.engine.vllm import VLLMAdapter
 
     return {
         "ollama": OllamaAdapter(),

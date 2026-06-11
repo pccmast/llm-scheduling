@@ -16,8 +16,7 @@ class WeightedBalancer(LoadBalancer):
         """内部维护每个实例的当前负载分数（float）。"""
         self._loads: dict[str, float] = {}
 
-    def select(self, candidates: list[ModelInstance],
-               request: InferenceRequest) -> ModelInstance:
+    def select(self, candidates: list[ModelInstance], request: InferenceRequest) -> ModelInstance:
         """选择 (当前负载 + 请求预估重量) / 实例容量因子 最小的实例。
 
         计算公式：score = (current_load + request.estimated_weight) / instance.capacity_factor
@@ -37,8 +36,7 @@ class WeightedBalancer(LoadBalancer):
 
         return min(candidates, key=score)
 
-    def on_request_start(self, instance_id: str,
-                         request: InferenceRequest | None = None) -> None:
+    def on_request_start(self, instance_id: str, request: InferenceRequest | None = None) -> None:
         """增加实例的当前负载。
 
         如果 request 不为 None，使用 request.estimated_weight 作为增量；
@@ -47,8 +45,7 @@ class WeightedBalancer(LoadBalancer):
         delta = request.estimated_weight if request else 0.0
         self._loads[instance_id] = self._loads.get(instance_id, 0.0) + delta
 
-    def on_request_end(self, instance_id: str,
-                       request: InferenceRequest | None = None) -> None:
+    def on_request_end(self, instance_id: str, request: InferenceRequest | None = None) -> None:
         """减少实例的当前负载。
 
         如果 request 不为 None，使用 request.estimated_weight 作为减量；

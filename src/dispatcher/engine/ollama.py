@@ -18,8 +18,7 @@ class OllamaAdapter(EngineAdapter):
     def engine_type(self) -> str:
         return "ollama"
 
-    def build_request(self, instance: ModelInstance,
-                      request: InferenceRequest) -> tuple[str, dict, dict]:
+    def build_request(self, instance: ModelInstance, request: InferenceRequest) -> tuple[str, dict, dict]:
         """构建 Ollama /api/chat 请求。
 
         Precondition:

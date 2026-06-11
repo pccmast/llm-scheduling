@@ -15,8 +15,7 @@ class RoundRobinBalancer(LoadBalancer):
         """内部维护一个计数器 int。"""
         self._counter: int = 0
 
-    def select(self, candidates: list[ModelInstance],
-               request: InferenceRequest) -> ModelInstance:
+    def select(self, candidates: list[ModelInstance], request: InferenceRequest) -> ModelInstance:
         """按计数器取模选择候选实例。
 
         Precondition:

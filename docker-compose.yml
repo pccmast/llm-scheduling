@@ -1,0 +1,30 @@
+services:
+  dispatcher:
+    build: .
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - DISPATCHER_PORT=9090
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mock-engine-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    ports:
+      - "8001:8001"
+    command: ["uv", "run", "python", "scripts/mock_engine.py", "--port", "8001", "--engine", "ollama"]
+
+  mock-engine-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    ports:
+      - "8002:8002"
+    command: ["uv", "run", "python", "scripts/mock_engine.py", "--port", "8002", "--engine", "ollama"]

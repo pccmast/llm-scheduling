@@ -24,9 +24,7 @@ class _PendingRequest:
 class DynamicBatcher:
     """动态批处理器。将并发请求攒成批量发送。"""
 
-    def __init__(self, proxy,
-                 max_batch_size: int = 8,
-                 max_wait_ms: float = 50.0) -> None:
+    def __init__(self, proxy, max_batch_size: int = 8, max_wait_ms: float = 50.0) -> None:
         """
         Args:
             proxy: 路由代理（用于实际转发）。
@@ -102,7 +100,7 @@ class DynamicBatcher:
                     pending.future.set_exception(result)
             else:
                 if not pending.future.done():
-                    pending.future.set_result(result)
+                    pending.future.set_result(result)  # type: ignore[arg-type]
 
     @property
     def buffer_size(self) -> int:

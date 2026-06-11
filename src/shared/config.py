@@ -18,6 +18,7 @@ class DispatcherSettings(BaseSettings):
     通过环境变量 DISPATCHER_<FIELD> 可覆盖 YAML 和默认值。
     例如：DISPATCHER_PORT=8080 覆盖 port 配置。
     """
+
     model_config = {"env_prefix": "DISPATCHER_"}
 
     host: str = "0.0.0.0"
@@ -44,7 +45,7 @@ def load_config(config_path: str | None = None) -> DispatcherSettings:
     Raises:
         pydantic.ValidationError: 配置格式错误时抛出。
     """
-    yaml_values: dict[str, object] = {}
+    yaml_values: dict[str, object] = {}  # type: ignore[var-annotated]
 
     yaml_path = Path(config_path) if config_path else Path("./config/default.yaml")
     if yaml_path.exists():
@@ -59,7 +60,7 @@ def load_config(config_path: str | None = None) -> DispatcherSettings:
 
     # DispatcherSettings 在实例化时会自动读取环境变量（DISPATCHER_ 前缀），
     # 环境变量的优先级最高
-    return DispatcherSettings(**yaml_values)
+    return DispatcherSettings(**yaml_values)  # type: ignore[arg-type]
 
 
 def load_yaml_config(config_path: str | None = None) -> dict:

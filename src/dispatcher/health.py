@@ -7,20 +7,19 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 import httpx
 
-from src.shared.models import EngineAdapter, HealthCheckConfig, InstanceStatus, ModelInstance
 from src.dispatcher.registry import InstanceRegistry
+from src.shared.models import EngineAdapter, HealthCheckConfig, InstanceStatus, ModelInstance
 
 
 class HealthChecker:
     """实例健康检查器。"""
 
-    def __init__(self, registry: InstanceRegistry,
-                 engine_adapters: dict[str, EngineAdapter],
-                 config: HealthCheckConfig) -> None:
+    def __init__(
+        self, registry: InstanceRegistry, engine_adapters: dict[str, EngineAdapter], config: HealthCheckConfig
+    ) -> None:
         """
         Args:
             registry: 实例注册表（引用，非拷贝）。
@@ -98,9 +97,8 @@ class HealthChecker:
             return
 
         # 并行检查所有非 DRAINING 实例
-        results = await asyncio.gather(
-            *(self._check_and_update(inst) for inst in instances
-              if inst.status != InstanceStatus.DRAINING),
+        await asyncio.gather(
+            *(self._check_and_update(inst) for inst in instances if inst.status != InstanceStatus.DRAINING),
             return_exceptions=True,
         )
 
@@ -110,17 +108,13 @@ class HealthChecker:
 
         if is_healthy:
             self._failure_counts[instance.instance_id] = 0
-            self._success_counts[instance.instance_id] = (
-                self._success_counts.get(instance.instance_id, 0) + 1
-            )
+            self._success_counts[instance.instance_id] = self._success_counts.get(instance.instance_id, 0) + 1
             # 连续成功达到阈值则恢复
             if self._success_counts[instance.instance_id] >= self._config.healthy_threshold:
                 self._registry.mark_healthy(instance.instance_id)
         else:
             self._success_counts[instance.instance_id] = 0
-            self._failure_counts[instance.instance_id] = (
-                self._failure_counts.get(instance.instance_id, 0) + 1
-            )
+            self._failure_counts[instance.instance_id] = self._failure_counts.get(instance.instance_id, 0) + 1
             # 连续失败达到阈值则标记为 unhealthy
             if self._failure_counts[instance.instance_id] >= self._config.unhealthy_threshold:
                 self._registry.mark_unhealthy(instance.instance_id)

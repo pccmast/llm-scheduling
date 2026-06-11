@@ -22,13 +22,15 @@ def create_balancer(strategy: str) -> LoadBalancer:
     """
     if strategy == "round_robin":
         from src.dispatcher.balancer.round_robin import RoundRobinBalancer
+
         return RoundRobinBalancer()
     elif strategy == "least_conn":
         from src.dispatcher.balancer.least_conn import LeastConnectionsBalancer
+
         return LeastConnectionsBalancer()
     elif strategy == "weighted":
         from src.dispatcher.balancer.weighted import WeightedBalancer
+
         return WeightedBalancer()
     else:
-        raise ValueError(f"Unknown load balancer strategy: {strategy}. "
-                         f"Supported: round_robin, least_conn, weighted")
+        raise ValueError(f"Unknown load balancer strategy: {strategy}. Supported: round_robin, least_conn, weighted")

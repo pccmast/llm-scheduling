@@ -8,16 +8,14 @@ from __future__ import annotations
 
 import time
 
-from src.shared.models import MetricsRecorder, ScaleConfig, ScaleDecision
 from src.dispatcher.registry import InstanceRegistry
+from src.shared.models import MetricsRecorder, ScaleConfig, ScaleDecision
 
 
 class AutoScaler:
     """自动扩缩容决策引擎。"""
 
-    def __init__(self, registry: InstanceRegistry,
-                 metrics: MetricsRecorder,
-                 config: ScaleConfig) -> None:
+    def __init__(self, registry: InstanceRegistry, metrics: MetricsRecorder, config: ScaleConfig) -> None:
         """
         Args:
             registry: 实例注册表（用于获取当前实例数）。
@@ -62,26 +60,26 @@ class AutoScaler:
 
         # 计算平均负载：基于 per_instance 的请求数 / 实例数估算
         per_instance = summary.get("per_instance", {})
-        total_active = sum(
-            stats.get("request_count", 0) for stats in per_instance.values()
-        )
+        total_active = sum(stats.get("request_count", 0) for stats in per_instance.values())
         avg_load = total_active / max(current_count, 1) if total_active > 0 else 0.0
 
         # Cooldown 检查
         in_cooldown = (now - self._last_scale_time) < self._config.cooldown_seconds
 
         # ── 扩容判断 ──
-        if (queue_depth > self._config.scale_up_queue_threshold
-                and avg_load > self._config.scale_up_load_threshold
-                and current_count < self._config.max_instances
-                and not in_cooldown):
+        if (
+            queue_depth > self._config.scale_up_queue_threshold
+            and avg_load > self._config.scale_up_load_threshold
+            and current_count < self._config.max_instances
+            and not in_cooldown
+        ):
             # 重置空闲计时
             self._idle_since = None
             return ScaleDecision(
                 action="scale_up",
                 count=1,
                 reason=f"Queue depth {queue_depth} > threshold {self._config.scale_up_queue_threshold}, "
-                       f"avg load {avg_load:.2f} > {self._config.scale_up_load_threshold}",
+                f"avg load {avg_load:.2f} > {self._config.scale_up_load_threshold}",
             )
 
         # ── 缩容判断 ──
@@ -90,14 +88,16 @@ class AutoScaler:
                 self._idle_since = now
 
             idle_seconds = now - self._idle_since
-            if (idle_seconds > self._config.scale_down_idle_seconds
-                    and current_count > self._config.min_instances
-                    and not in_cooldown):
+            if (
+                idle_seconds > self._config.scale_down_idle_seconds
+                and current_count > self._config.min_instances
+                and not in_cooldown
+            ):
                 return ScaleDecision(
                     action="scale_down",
                     count=1,
                     reason=f"Idle for {idle_seconds:.0f}s > {self._config.scale_down_idle_seconds}s, "
-                           f"avg load {avg_load:.2f} < {self._config.scale_down_load_threshold}",
+                    f"avg load {avg_load:.2f} < {self._config.scale_down_load_threshold}",
                 )
         else:
             # 有负载，重置空闲计时
