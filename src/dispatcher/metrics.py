@@ -1,8 +1,4 @@
-"""Module 10: Metrics Collector — 规格书 §4 Module 10.
-
-基于 prometheus-client 的指标收集器。收集调度系统的运行指标
-（请求延迟、TTFT、token 消耗、错误率、队列深度），暴露给 Prometheus 和 Dashboard。
-"""
+"""Module 10: Metrics Collector — 规格书 §4 Module 10."""
 
 from __future__ import annotations
 
@@ -15,85 +11,57 @@ class PrometheusMetricsRecorder(MetricsRecorder):
     """基于 prometheus-client 的指标收集器。"""
 
     def __init__(self, registry: CollectorRegistry | None = None) -> None:
-        """初始化 Prometheus 指标定义。
-
-        Args:
-            registry: Prometheus 注册中心。None 时使用默认全局 registry。
-        """
-        reg = registry or CollectorRegistry(auto_describe=True)
+        reg_kwargs = {"registry": registry} if registry is not None else {}
 
         self._requests_total = Counter(
-            "dispatcher_requests_total",
-            "Total number of inference requests",
-            ["instance_id", "status"],
-            registry=reg,
+            "dispatcher_requests_total", "Total requests",
+            ["instance_id", "status"], **reg_kwargs,
         )
         self._request_latency_ms = Histogram(
-            "dispatcher_request_latency_ms",
-            "Request latency in milliseconds",
+            "dispatcher_request_latency_ms", "Latency ms",
             ["instance_id"],
             buckets=[50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000],
-            registry=reg,
+            **reg_kwargs,
         )
         self._request_ttft_ms = Histogram(
-            "dispatcher_request_ttft_ms",
-            "Time to first token in milliseconds",
+            "dispatcher_request_ttft_ms", "TTFT ms",
             ["instance_id"],
             buckets=[50, 100, 200, 500, 1000, 2000],
-            registry=reg,
+            **reg_kwargs,
         )
         self._tokens_total = Counter(
-            "dispatcher_tokens_total",
-            "Total tokens processed",
-            ["instance_id", "type"],
-            registry=reg,
+            "dispatcher_tokens_total", "Tokens processed",
+            ["instance_id", "type"], **reg_kwargs,
         )
         self._queue_depth = Gauge(
-            "dispatcher_queue_depth",
-            "Current request queue depth",
-            registry=reg,
+            "dispatcher_queue_depth", "Queue depth", **reg_kwargs,
         )
         self._errors_total = Counter(
-            "dispatcher_errors_total",
-            "Total errors",
-            ["instance_id", "error_type"],
-            registry=reg,
+            "dispatcher_errors_total", "Total errors",
+            ["instance_id", "error_type"], **reg_kwargs,
         )
         self._batch_size = Histogram(
-            "dispatcher_batch_size",
-            "Batch size distribution",
-            buckets=[1, 2, 4, 8, 16, 32],
-            registry=reg,
+            "dispatcher_batch_size", "Batch size",
+            buckets=[1, 2, 4, 8, 16, 32], **reg_kwargs,
         )
 
-        self._registry = reg
         self._latencies: dict[str, list[float]] = {}
         self._request_count: int = 0
         self._error_count: int = 0
 
-    def record_request(
-        self,
-        instance_id: str,
-        latency_ms: float,
-        ttft_ms: float,
-        tokens: TokenUsage,
-        success: bool,
-        queued_ms: float = 0,
-    ) -> None:
+    def record_request(self, instance_id: str, latency_ms: float,
+                       ttft_ms: float, tokens: TokenUsage,
+                       success: bool, queued_ms: float = 0) -> None:
         status = "success" if success else "error"
         self._requests_total.labels(instance_id=instance_id, status=status).inc()
         self._request_latency_ms.labels(instance_id=instance_id).observe(latency_ms)
         self._request_ttft_ms.labels(instance_id=instance_id).observe(ttft_ms)
         self._tokens_total.labels(instance_id=instance_id, type="prompt").inc(tokens.prompt_tokens)
         self._tokens_total.labels(instance_id=instance_id, type="completion").inc(tokens.completion_tokens)
-
         self._request_count += 1
-        if instance_id not in self._latencies:
-            self._latencies[instance_id] = []
-        self._latencies[instance_id].append(latency_ms)
+        self._latencies.setdefault(instance_id, []).append(latency_ms)
         if len(self._latencies[instance_id]) > 1000:
             self._latencies[instance_id] = self._latencies[instance_id][-1000:]
-
         if not success:
             self._error_count += 1
 
@@ -108,36 +76,23 @@ class PrometheusMetricsRecorder(MetricsRecorder):
         self._batch_size.observe(batch_size)
 
     def get_summary(self) -> dict:
-        all_latencies: list[float] = []
+        all_lats: list[float] = []
         for lats in self._latencies.values():
-            all_latencies.extend(lats)
-
-        if all_latencies:
-            sorted_lats = sorted(all_latencies)
-            avg = sum(all_latencies) / len(all_latencies)
-            p95_idx = int(len(sorted_lats) * 0.95)
-            p99_idx = int(len(sorted_lats) * 0.99)
-            p95 = sorted_lats[min(p95_idx, len(sorted_lats) - 1)]
-            p99 = sorted_lats[min(p99_idx, len(sorted_lats) - 1)]
+            all_lats.extend(lats)
+        if all_lats:
+            s = sorted(all_lats)
+            p95 = s[min(int(len(s) * 0.95), len(s) - 1)]
+            p99 = s[min(int(len(s) * 0.99), len(s) - 1)]
+            avg = sum(s) / len(s)
         else:
-            avg = 0.0
-            p95 = 0.0
-            p99 = 0.0
+            avg, p95, p99 = 0.0, 0.0, 0.0
 
-        per_instance: dict[str, dict] = {}
-        for inst_id, lats in self._latencies.items():
-            if lats:
-                per_instance[inst_id] = {
-                    "request_count": len(lats),
-                    "avg_latency_ms": sum(lats) / len(lats),
-                }
-
+        per_instance = {
+            i: {"request_count": len(l), "avg_latency_ms": sum(l) / len(l) if l else 0}
+            for i, l in self._latencies.items() if l
+        }
         return {
-            "request_count": self._request_count,
-            "error_count": self._error_count,
-            "avg_latency_ms": avg,
-            "p95_latency_ms": p95,
-            "p99_latency_ms": p99,
-            "queue_depth": self._queue_depth._value.get(),
-            "per_instance": per_instance,
+            "request_count": self._request_count, "error_count": self._error_count,
+            "avg_latency_ms": avg, "p95_latency_ms": p95, "p99_latency_ms": p99,
+            "queue_depth": self._queue_depth._value.get(), "per_instance": per_instance,
         }

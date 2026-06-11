@@ -14,8 +14,6 @@ import structlog
 def setup_logging(log_level: str = "info") -> None:
     """初始化 structlog 结构化日志。
 
-    配置标准日志输出到 stdout，格式化为可读的键值对。
-
     Args:
         log_level: 日志级别（"debug" | "info" | "warning" | "error"）。
     """
@@ -23,14 +21,9 @@ def setup_logging(log_level: str = "info") -> None:
 
     structlog.configure(
         processors=[
-            structlog.stdlib.filter_by_level,
-            structlog.stdlib.add_logger_name,
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
-            structlog.processors.UnicodeDecoder(),
             structlog.dev.ConsoleRenderer(),
         ],
         context_class=dict,
@@ -39,7 +32,7 @@ def setup_logging(log_level: str = "info") -> None:
         cache_logger_on_first_use=True,
     )
 
-    # 同时配置标准 logging（供第三方库使用）
+    # 配置标准 logging
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,

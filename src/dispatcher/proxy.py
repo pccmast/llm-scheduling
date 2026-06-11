@@ -14,6 +14,7 @@ from typing import Optional
 import httpx
 
 from src.dispatcher.registry import InstanceRegistry
+from src.dispatcher.circuit_breaker import CircuitBreakerRegistry
 from src.shared.models import (
     CircuitBreaker,
     EngineAdapter,
@@ -35,7 +36,7 @@ class RoutingProxy:
         registry: InstanceRegistry,
         balancer: LoadBalancer,
         engine_adapters: dict[str, EngineAdapter],
-        circuit_breakers: dict[str, CircuitBreaker] | None = None,
+        circuit_breakers: dict[str, CircuitBreaker] | CircuitBreakerRegistry | None = None,
         metrics: MetricsRecorder | None = None,
         timeout: float = 120.0,
     ) -> None:
@@ -44,17 +45,15 @@ class RoutingProxy:
             registry: 实例注册表。
             balancer: 负载均衡策略。
             engine_adapters: 引擎类型 → 适配器的映射。
-            circuit_breakers: 实例 ID → 熔断器的映射。Sprint 1 可为空。
+            circuit_breakers: 实例 ID → 熔断器的映射或 CircuitBreakerRegistry。
             metrics: 指标记录器。Sprint 1 可为 None。
             timeout: 上游转发超时（秒）。
-
-        Precondition:
-            circuit_breakers 中包含所有已注册实例的熔断器。
         """
         self._registry = registry
         self._balancer = balancer
         self._engine_adapters = engine_adapters
-        self._circuit_breakers = circuit_breakers or {}
+        self._cb_dict: dict[str, CircuitBreaker] = circuit_breakers if isinstance(circuit_breakers, dict) else {}  # type: ignore[assignment]
+        self._cb_registry: CircuitBreakerRegistry | None = circuit_breakers if isinstance(circuit_breakers, CircuitBreakerRegistry) else None  # type: ignore[assignment]
         self._metrics = metrics
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
@@ -118,6 +117,19 @@ class RoutingProxy:
             # 6. 转发
             client = self._get_client()
             response = await client.post(url, json=body, headers=headers, timeout=self._timeout)
+
+            # 6a. 检查 HTTP 状态码
+            if response.status_code >= 500:
+                error_resp = InferenceResponse(
+                    request_id=request.request_id,
+                    instance_id=instance.instance_id,
+                    status="error",
+                    error_message=f"Upstream returned {response.status_code}",
+                    latency_ms=(time.monotonic() - start_time) * 1000,
+                )
+                self._record_failure(instance, error_resp, request, start_time)
+                return error_resp
+
             raw = response.json()
 
             # 7. 解析响应
@@ -127,7 +139,7 @@ class RoutingProxy:
             inference_response.latency_ms = (time.monotonic() - start_time) * 1000
 
             # 8. 更新熔断器
-            cb = self._circuit_breakers.get(instance.instance_id)
+            cb = self._get_cb(instance.instance_id)
             if cb:
                 cb.record_success()
 
@@ -227,7 +239,7 @@ class RoutingProxy:
                     yield line + "\n"
 
             # 记录指标
-            cb = self._circuit_breakers.get(instance.instance_id)
+            cb = self._get_cb(instance.instance_id)
             if cb:
                 cb.record_success()
 
@@ -251,7 +263,7 @@ class RoutingProxy:
             yield f"data: {error_event}\n\n"
             yield "data: [DONE]\n\n"
             if instance:
-                cb = self._circuit_breakers.get(instance.instance_id)
+                cb = self._get_cb(instance.instance_id)
                 if cb:
                     cb.record_failure()
             if self._metrics and instance:
@@ -266,15 +278,26 @@ class RoutingProxy:
             if instance:
                 self._balancer.on_request_end(instance.instance_id, request)
 
+    def _get_cb(self, instance_id: str) -> CircuitBreaker | None:
+        """获取实例的熔断器（支持 dict 和 CircuitBreakerRegistry）。"""
+        if instance_id in self._cb_dict:
+            return self._cb_dict[instance_id]
+        if self._cb_registry:
+            return self._cb_registry.get_or_create(instance_id)
+        return None
+
+    def _has_circuit_breakers(self) -> bool:
+        """是否有任何熔断器配置。"""
+        return bool(self._cb_dict) or self._cb_registry is not None
+
     def _filter_by_circuit_breaker(self, candidates: list[ModelInstance]) -> list[ModelInstance]:
         """过滤掉熔断器 OPEN 的实例。"""
-        if not self._circuit_breakers:
+        if not self._has_circuit_breakers():
             return candidates
         return [
             inst
             for inst in candidates
-            if self._circuit_breakers.get(inst.instance_id) is None
-            or self._circuit_breakers[inst.instance_id].allow_request()
+            if (cb := self._get_cb(inst.instance_id)) is None or cb.allow_request()
         ]
 
     def _get_adapter(self, instance: ModelInstance) -> EngineAdapter:
@@ -293,7 +316,7 @@ class RoutingProxy:
     ) -> None:
         """记录失败的请求（熔断器 + 指标）。"""
         if instance:
-            cb = self._circuit_breakers.get(instance.instance_id)
+            cb = self._get_cb(instance.instance_id)
             if cb:
                 cb.record_failure()
             if self._metrics:

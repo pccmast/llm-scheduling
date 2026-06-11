@@ -65,15 +65,12 @@ async def lifespan(app: FastAPI):
     # 5. Metrics
     metrics = PrometheusMetricsRecorder()
 
-    # 6. Routing Proxy
-    circuit_breakers_map = {
-        inst.instance_id: cb_registry.get_or_create(inst.instance_id) for inst in registry.list_all()
-    }
+    # 6. Routing Proxy (pass registry for dynamic CB lookup)
     proxy = RoutingProxy(
         registry=registry,
         balancer=balancer,
         engine_adapters=engine_adapters,
-        circuit_breakers=circuit_breakers_map,  # type: ignore[arg-type]
+        circuit_breakers=cb_registry,
         metrics=metrics,
         timeout=settings.upstream_timeout,
     )
