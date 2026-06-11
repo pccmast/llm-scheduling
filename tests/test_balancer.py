@@ -11,6 +11,7 @@ from src.shared.models import InferenceRequest, ModelInstance
 from src.dispatcher.balancer import create_balancer
 from src.dispatcher.balancer.round_robin import RoundRobinBalancer
 from src.dispatcher.balancer.least_conn import LeastConnectionsBalancer
+from src.dispatcher.balancer.weighted import WeightedBalancer
 
 
 @pytest.fixture
@@ -139,3 +140,94 @@ class TestCreateBalancer:
         """create_balancer("unknown") 抛出 ValueError。"""
         with pytest.raises(ValueError, match="Unknown load balancer strategy"):
             create_balancer("unknown")
+
+    def test_create_weighted(self) -> None:
+        """create_balancer("weighted") 返回 WeightedBalancer 实例。"""
+        b = create_balancer("weighted")
+        assert isinstance(b, WeightedBalancer)
+
+
+# ── WeightedBalancer ────────────────────────────────────────
+
+class TestWeightedBalancer:
+    """加权负载均衡策略测试。"""
+
+    def test_select_lightest_instance(self) -> None:
+        """选择 (load + weight) / capacity 最小的实例。"""
+        balancer = WeightedBalancer()
+        # i1: load=100, cap=1.0 → score=(100+500)/1.0=600
+        # i2: load=50, cap=1.0  → score=(50+500)/1.0=550
+        balancer._loads["i1"] = 100.0
+        balancer._loads["i2"] = 50.0
+
+        req = InferenceRequest(
+            request_id="r1", model="test",
+            messages=[{"role": "user", "content": "x" * 400}],
+            max_tokens=200,
+        )
+        candidates = [
+            ModelInstance(instance_id="i1", address="http://a:8000", model="test", engine_type="ollama", capacity_factor=1.0),
+            ModelInstance(instance_id="i2", address="http://b:8000", model="test", engine_type="vllm", capacity_factor=1.0),
+        ]
+        inst = balancer.select(candidates, req)
+        assert inst.instance_id == "i2"
+
+    def test_capacity_factor_matters(self) -> None:
+        """高 capacity_factor 的实例更优先。"""
+        balancer = WeightedBalancer()
+        # i1: load=100, cap=2.0 → score=(100+500)/2.0=300
+        # i2: load=80, cap=1.0  → score=(80+500)/1.0=580
+        balancer._loads["i1"] = 100.0
+        balancer._loads["i2"] = 80.0
+
+        req = InferenceRequest(
+            request_id="r1", model="test",
+            messages=[{"role": "user", "content": "x" * 400}],
+            max_tokens=200,
+        )
+        candidates = [
+            ModelInstance(instance_id="i1", address="http://a:8000", model="test", engine_type="ollama", capacity_factor=2.0),
+            ModelInstance(instance_id="i2", address="http://b:8000", model="test", engine_type="vllm", capacity_factor=1.0),
+        ]
+        inst = balancer.select(candidates, req)
+        assert inst.instance_id == "i1"
+
+    def test_empty_candidates_raises_value_error(self) -> None:
+        balancer = WeightedBalancer()
+        req = InferenceRequest(request_id="r1", model="test", messages=[])
+        with pytest.raises(ValueError, match="must not be empty"):
+            balancer.select([], req)
+
+    def test_on_request_start_and_end_with_request(self) -> None:
+        """on_request_start/end 使用 request.estimated_weight。"""
+        balancer = WeightedBalancer()
+        req = InferenceRequest(
+            request_id="r1", model="test",
+            messages=[{"role": "user", "content": "x" * 400}],
+            max_tokens=200,
+        )
+        # estimated_weight = 100 + 200*2 = 500
+        balancer.on_request_start("i1", req)
+        assert balancer.get_load("i1") == 500.0
+
+        balancer.on_request_start("i1", req)
+        assert balancer.get_load("i1") == 1000.0
+
+        balancer.on_request_end("i1", req)
+        assert balancer.get_load("i1") == 500.0
+
+    def test_on_request_end_does_not_go_below_zero(self) -> None:
+        balancer = WeightedBalancer()
+        req = InferenceRequest(
+            request_id="r1", model="test",
+            messages=[{"role": "user", "content": "x" * 400}],
+            max_tokens=200,
+        )
+        balancer.on_request_end("i1", req)
+        assert balancer.get_load("i1") == 0.0
+
+    def test_on_request_start_without_request(self) -> None:
+        """request=None 时增量为 0。"""
+        balancer = WeightedBalancer()
+        balancer.on_request_start("i1")
+        assert balancer.get_load("i1") == 0.0
