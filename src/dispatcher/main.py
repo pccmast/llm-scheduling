@@ -1,7 +1,8 @@
 """Module 13: Application Factory — 规格书 §4 Module 13.
 
 创建 FastAPI 应用实例，通过 lifespan 上下文管理器协调所有组件的初始化与清理。
-Sprint 1 简化版：只注入 Registry、Balancer、EngineAdapter(Ollama)、HealthChecker、RoutingProxy。
+完整版：注入 Registry、Balancer、EngineAdapter、HealthChecker、RoutingProxy、
+CircuitBreaker、Metrics、RequestQueue、DynamicBatcher、AutoScaler。
 """
 
 from __future__ import annotations
@@ -10,99 +11,127 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from prometheus_client import make_asgi_app
 
 from src.shared.config import load_config, load_yaml_config
 from src.shared.logging import setup_logging, get_logger
-from src.shared.models import HealthCheckConfig
+from src.shared.models import (
+    HealthCheckConfig,
+    ScaleConfig,
+)
 from src.dispatcher.registry import InstanceRegistry
 from src.dispatcher.balancer import create_balancer
 from src.dispatcher.engine import create_adapter_registry
 from src.dispatcher.health import HealthChecker
 from src.dispatcher.proxy import RoutingProxy
+from src.dispatcher.circuit_breaker import CircuitBreakerConfig, CircuitBreakerRegistry
+from src.dispatcher.metrics import PrometheusMetricsRecorder
+from src.dispatcher.queue import RequestQueue
+from src.dispatcher.batcher import DynamicBatcher
+from src.dispatcher.scaler import AutoScaler
 
 logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理器。
-
-    Startup 阶段（按顺序）：
-    1. 加载 DispatcherSettings 配置
-    2. 创建 InstanceRegistry 并从配置加载实例
-    3. 创建 EngineAdapter 注册表
-    4. 创建 LoadBalancer（根据配置策略）
-    5. 创建 RoutingProxy
-    6. 创建 HealthChecker 并启动后台检查任务
-    7. 将所有组件注入 app.state
-
-    Shutdown 阶段：
-    1. 停止 HealthChecker
-    2. 关闭 RoutingProxy（httpx.AsyncClient）
-    """
+    """应用生命周期管理器。"""
     # ── Startup ──
     logger.info("Starting LLM Dispatcher...")
 
-    # 1. 加载配置
     settings = load_config()
     yaml_config = load_yaml_config()
     setup_logging(settings.log_level)
 
-    # 2. 创建并加载实例注册表
+    # 1. Registry + 实例加载
     registry = InstanceRegistry()
     instances_cfg = yaml_config.get("instances", [])
     if instances_cfg:
         registry.load_from_config(instances_cfg)
         logger.info("loaded_instances", count=registry.count)
 
-    # 3. 创建引擎适配器
+    # 2. Engine Adapters
     engine_adapters = create_adapter_registry()
 
-    # 4. 创建负载均衡器
+    # 3. Load Balancer
     strategy = yaml_config.get("load_balancer", {}).get("strategy", "round_robin")
     balancer = create_balancer(strategy)
-    logger.info("balancer_strategy", strategy=strategy)
 
-    # 5. 创建路由代理（Sprint 1: 无 CircuitBreaker、无 Metrics）
+    # 4. Circuit Breakers
+    cb_config_data = yaml_config.get("circuit_breaker", {})
+    cb_config = CircuitBreakerConfig(**cb_config_data) if cb_config_data else CircuitBreakerConfig()
+    cb_registry = CircuitBreakerRegistry(default_config=cb_config)
+
+    # 5. Metrics
+    metrics = PrometheusMetricsRecorder()
+
+    # 6. Routing Proxy
+    circuit_breakers_map = {
+        inst.instance_id: cb_registry.get_or_create(inst.instance_id)
+        for inst in registry.list_all()
+    }
     proxy = RoutingProxy(
         registry=registry,
         balancer=balancer,
         engine_adapters=engine_adapters,
-        circuit_breakers=None,
-        metrics=None,
+        circuit_breakers=circuit_breakers_map,
+        metrics=metrics,
         timeout=settings.upstream_timeout,
     )
 
-    # 6. 创建健康检查器（Sprint 1: 后台运行）
-    health_config = yaml_config.get("health_check", {})
+    # 7. Request Queue
+    q_config = yaml_config.get("queue", {})
+    request_queue = RequestQueue(
+        max_size=q_config.get("max_size", 100),
+        max_wait_seconds=q_config.get("max_wait_seconds", 30.0),
+    )
+
+    # 8. Dynamic Batcher (optional)
+    batcher_config = yaml_config.get("batcher", {})
+    batcher = None
+    if batcher_config.get("enabled", False):
+        batcher = DynamicBatcher(
+            proxy=proxy,
+            max_batch_size=batcher_config.get("max_batch_size", 8),
+            max_wait_ms=batcher_config.get("max_wait_ms", 50),
+        )
+
+    # 9. Auto Scaler (optional)
+    scaler_config = yaml_config.get("auto_scaler", {})
+    auto_scaler = None
+    if scaler_config.get("enabled", False):
+        scale_cfg = ScaleConfig(**scaler_config)
+        auto_scaler = AutoScaler(registry=registry, metrics=metrics, config=scale_cfg)
+
+    # 10. Health Checker
+    hc_config_data = yaml_config.get("health_check", {})
+    hc_config = HealthCheckConfig(**hc_config_data) if hc_config_data else HealthCheckConfig()
     health_checker = HealthChecker(
         registry=registry,
         engine_adapters=engine_adapters,
-        config=HealthCheckConfig(**health_config) if health_config else HealthCheckConfig(),
+        config=hc_config,
     )
     health_task = asyncio.create_task(health_checker.run_forever())
 
-    # 7. 注入 app.state
+    # ── 注入 app.state ──
     app.state.registry = registry
     app.state.balancer = balancer
     app.state.engine_adapters = engine_adapters
     app.state.proxy = proxy
     app.state.health_checker = health_checker
     app.state.settings = settings
-
-    # Sprint 2-3 待注入的组件（占位）
-    app.state.request_queue = None
-    app.state.batcher = None
-    app.state.circuit_breakers = None
-    app.state.metrics = None
-    app.state.auto_scaler = None
+    app.state.circuit_breakers = cb_registry
+    app.state.metrics = metrics
+    app.state.request_queue = request_queue
+    app.state.batcher = batcher
+    app.state.auto_scaler = auto_scaler
 
     logger.info("LLM Dispatcher started", port=settings.port)
 
     yield
 
     # ── Shutdown ──
-    logger.info("Shutting down LLM Dispatcher...")
+    logger.info("Shutting down...")
     health_checker.stop()
     health_task.cancel()
     try:
@@ -114,18 +143,9 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """创建并配置 FastAPI 应用。
+    """创建并配置 FastAPI 应用。"""
+    app = FastAPI(title="LLM Inference Dispatcher", version="0.2.0", lifespan=lifespan)
 
-    Returns:
-        配置完成的 FastAPI 实例，包含 lifespan 管理器、推理/管理/健康路由。
-    """
-    app = FastAPI(
-        title="LLM Inference Dispatcher",
-        version="0.1.0",
-        lifespan=lifespan,
-    )
-
-    # 注册路由
     from src.dispatcher.api.health import health_router
     from src.dispatcher.api.inference import inference_router
     from src.dispatcher.api.admin import admin_router
@@ -133,5 +153,9 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(inference_router)
     app.include_router(admin_router)
+
+    # Prometheus /metrics
+    metrics_app = make_asgi_app()
+    app.mount("/metrics", metrics_app)
 
     return app
