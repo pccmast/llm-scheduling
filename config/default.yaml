@@ -1,0 +1,38 @@
+dispatcher:
+  host: "0.0.0.0"
+  port: 9090
+  upstream_timeout: 120.0
+
+instances: []
+
+load_balancer:
+  strategy: "weighted"   # "round_robin" | "least_conn" | "weighted"
+
+queue:
+  max_size: 100
+  max_wait_seconds: 30.0
+
+batcher:
+  enabled: false
+  max_batch_size: 8
+  max_wait_ms: 50
+
+circuit_breaker:
+  failure_threshold: 5
+  recovery_timeout: 30
+  half_open_max_calls: 1
+
+auto_scaler:
+  enabled: false
+  scale_up_queue_threshold: 10
+  scale_up_load_threshold: 0.8
+  scale_down_idle_seconds: 300
+  scale_down_load_threshold: 0.1
+  min_instances: 1
+  max_instances: 10
+  cooldown_seconds: 60
+
+health_check:
+  interval_seconds: 10.0
+  timeout_seconds: 5.0
+  unhealthy_threshold: 3
