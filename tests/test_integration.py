@@ -5,34 +5,35 @@
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 
+from src.dispatcher.balancer import create_balancer
+from src.dispatcher.engine import create_adapter_registry
+from src.dispatcher.health import HealthChecker
+from src.dispatcher.proxy import RoutingProxy
+from src.dispatcher.registry import InstanceRegistry
 from src.shared.models import (
     HealthCheckConfig,
     InferenceRequest,
     InstanceStatus,
     ModelInstance,
     NoAvailableInstanceError,
-    TokenUsage,
 )
-from src.dispatcher.registry import InstanceRegistry
-from src.dispatcher.health import HealthChecker
-from src.dispatcher.balancer import create_balancer
-from src.dispatcher.engine import create_adapter_registry
-from src.dispatcher.proxy import RoutingProxy
 
 
 @pytest.fixture
 def registry() -> InstanceRegistry:
     r = InstanceRegistry()
-    r.register(ModelInstance(
-        instance_id="i1", address="http://localhost:8001",
-        model="test-model", engine_type="ollama",
-    ))
+    r.register(
+        ModelInstance(
+            instance_id="i1",
+            address="http://localhost:8001",
+            model="test-model",
+            engine_type="ollama",
+        )
+    )
     return r
 
 
@@ -43,12 +44,15 @@ def engine_adapters() -> dict:
 
 # ── 1. Registry → HealthChecker ────────────────────────────
 
+
 class TestRegistryHealthChecker:
     """验证 Registry 和 HealthChecker 的联动。"""
 
     @pytest.mark.asyncio
     async def test_health_checker_discovers_registered_instance(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """实例注册后，HealthChecker 能自动发现并探测该实例。"""
         config = HealthCheckConfig(interval_seconds=10, timeout_seconds=1, unhealthy_threshold=3)
@@ -62,7 +66,9 @@ class TestRegistryHealthChecker:
 
     @pytest.mark.asyncio
     async def test_health_checker_marks_unhealthy(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """连续 3 次失败后 HealthChecker 将实例标记为 UNHEALTHY。"""
         config = HealthCheckConfig(interval_seconds=10, timeout_seconds=1, unhealthy_threshold=3)
@@ -78,7 +84,9 @@ class TestRegistryHealthChecker:
 
     @pytest.mark.asyncio
     async def test_health_checker_recovers_healthy(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """UNHEALTHY 实例恢复后自动标记为 HEALTHY。"""
         registry.mark_unhealthy("i1")
@@ -95,19 +103,26 @@ class TestRegistryHealthChecker:
 
 # ── 2. Registry → LoadBalancer → Proxy 完整链路 ────────────
 
+
 class TestBalancerProxyChain:
     """验证 list_by_model → select → forward 完整链路。"""
 
     @pytest.mark.asyncio
     async def test_full_chain_with_mock_engine(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """从 registry 获取候选 → balancer 选择 → proxy 转发的完整链路。"""
         # 注册第二个实例以测试负载均衡
-        registry.register(ModelInstance(
-            instance_id="i2", address="http://localhost:8002",
-            model="test-model", engine_type="ollama",
-        ))
+        registry.register(
+            ModelInstance(
+                instance_id="i2",
+                address="http://localhost:8002",
+                model="test-model",
+                engine_type="ollama",
+            )
+        )
 
         balancer = create_balancer("round_robin")
         proxy = RoutingProxy(
@@ -119,7 +134,8 @@ class TestBalancerProxyChain:
         # Mock httpx 返回成功响应
         mock_response = {
             "message": {"role": "assistant", "content": "Hello from mock!"},
-            "eval_count": 5, "prompt_eval_count": 2,
+            "eval_count": 5,
+            "prompt_eval_count": 2,
         }
         mock_client = MagicMock()
 
@@ -140,7 +156,9 @@ class TestBalancerProxyChain:
 
     @pytest.mark.asyncio
     async def test_list_by_model_provides_candidates_to_balancer(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """list_by_model() 返回的候选列表能被 balancer.select() 正确消费。"""
         balancer = create_balancer("round_robin")
@@ -154,18 +172,22 @@ class TestBalancerProxyChain:
 
 # ── 3. EngineAdapter → Proxy ───────────────────────────────
 
+
 class TestEngineAdapterProxy:
     """验证 EngineAdapter 构建的请求能被 mock 引擎正确响应。"""
 
     @pytest.mark.asyncio
     async def test_ollama_adapter_compatible_with_mock(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """OllamaAdapter.build_request 构建的请求与 mock 引擎兼容。"""
         adapter = engine_adapters["ollama"]
         instance = registry.get("i1")
         req = InferenceRequest(
-            request_id="req-1", model="test-model",
+            request_id="req-1",
+            model="test-model",
             messages=[{"role": "user", "content": "Hello"}],
         )
 
@@ -192,12 +214,15 @@ class TestEngineAdapterProxy:
 
 # ── 4. 异常路径 ─────────────────────────────────────────────
 
+
 class TestErrorPath:
     """验证异常路径：无可用实例时 NoAvailableInstanceError → HTTP 503。"""
 
     @pytest.mark.asyncio
     async def test_no_available_instance_error(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """无匹配模型时抛出 NoAvailableInstanceError。"""
         proxy = RoutingProxy(
@@ -213,7 +238,9 @@ class TestErrorPath:
 
     @pytest.mark.asyncio
     async def test_api_layer_returns_503_on_no_instance(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         """API 层在无可用实例时捕获异常并返回 HTTP 503。
 

@@ -7,42 +7,43 @@ Metrics→Proxy、AutoScaler、Admin API、vLLM/TGI Adapters。
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from prometheus_client import CollectorRegistry
 
+from src.dispatcher.balancer import create_balancer
+from src.dispatcher.balancer.weighted import WeightedBalancer
+from src.dispatcher.batcher import DynamicBatcher
+from src.dispatcher.circuit_breaker import CircuitBreakerConfig, CircuitBreakerRegistry, InstanceCircuitBreaker
+from src.dispatcher.engine import create_adapter_registry
+from src.dispatcher.engine.tgi import TGIAdapter
+from src.dispatcher.engine.vllm import VLLMAdapter
+from src.dispatcher.metrics import PrometheusMetricsRecorder
+from src.dispatcher.proxy import RoutingProxy
+from src.dispatcher.queue import RequestQueue
+from src.dispatcher.registry import InstanceRegistry
+from src.dispatcher.scaler import AutoScaler
 from src.shared.models import (
     CircuitBreaker,
     InferenceRequest,
-    InferenceResponse,
     LoadBalancer,
-    MetricsRecorder,
     ModelInstance,
     NoAvailableInstanceError,
     ScaleConfig,
     TokenUsage,
 )
-from src.dispatcher.registry import InstanceRegistry
-from src.dispatcher.queue import RequestQueue
-from src.dispatcher.batcher import DynamicBatcher
-from src.dispatcher.balancer import create_balancer
-from src.dispatcher.balancer.weighted import WeightedBalancer
-from src.dispatcher.engine import create_adapter_registry
-from src.dispatcher.circuit_breaker import InstanceCircuitBreaker, CircuitBreakerConfig, CircuitBreakerRegistry
-from src.dispatcher.metrics import PrometheusMetricsRecorder
-from src.dispatcher.scaler import AutoScaler
-from src.dispatcher.proxy import RoutingProxy
-from src.dispatcher.engine.ollama import OllamaAdapter
-from src.dispatcher.engine.vllm import VLLMAdapter
-from src.dispatcher.engine.tgi import TGIAdapter
-from prometheus_client import CollectorRegistry
 
 
 @pytest.fixture
 def registry() -> InstanceRegistry:
     r = InstanceRegistry()
-    r.register(ModelInstance(instance_id="i1", address="http://localhost:8001", model="test-model", engine_type="ollama"))
-    r.register(ModelInstance(instance_id="i2", address="http://localhost:8002", model="test-model", engine_type="ollama"))
+    r.register(
+        ModelInstance(instance_id="i1", address="http://localhost:8001", model="test-model", engine_type="ollama")
+    )
+    r.register(
+        ModelInstance(instance_id="i2", address="http://localhost:8002", model="test-model", engine_type="ollama")
+    )
     return r
 
 
@@ -57,15 +58,20 @@ def engine_adapters() -> dict:
 
 # ── 1. Queue → Proxy ───────────────────────────────────────
 
+
 class TestQueueProxy:
     """验证请求入队后出队能正确调用 proxy.forward()。"""
 
     @pytest.mark.asyncio
     async def test_enqueue_dequeue_to_proxy(self, registry: InstanceRegistry, engine_adapters: dict) -> None:
         q = RequestQueue(max_size=10, max_wait_seconds=30)
-        proxy = RoutingProxy(registry=registry, balancer=create_balancer("round_robin"), engine_adapters=engine_adapters)
+        proxy = RoutingProxy(
+            registry=registry, balancer=create_balancer("round_robin"), engine_adapters=engine_adapters
+        )
 
-        req = InferenceRequest(request_id="req-q1", model="test-model", messages=[{"role": "user", "content": "Hi"}], priority=1)
+        req = InferenceRequest(
+            request_id="req-q1", model="test-model", messages=[{"role": "user", "content": "Hi"}], priority=1
+        )
         await q.enqueue(req)
 
         item = await q.dequeue()
@@ -73,10 +79,13 @@ class TestQueueProxy:
 
         mock_resp = {"message": {"role": "assistant", "content": "OK"}, "eval_count": 1, "prompt_eval_count": 1}
         mock_client = MagicMock()
+
         async def _post(*a, **kw):
             r = MagicMock()
-            r.json.return_value = mock_resp; r.status_code = 200
+            r.json.return_value = mock_resp
+            r.status_code = 200
             return r
+
         mock_client.post = _post
 
         with patch.object(proxy, "_get_client", return_value=mock_client):
@@ -86,31 +95,45 @@ class TestQueueProxy:
 
 # ── 2. CircuitBreaker → Proxy ─────────────────────────────
 
+
 class TestCircuitBreakerProxy:
     """验证实例熔断后 Proxy 自动跳过；恢复后流量恢复。"""
 
     @pytest.mark.asyncio
     async def test_open_circuit_skips_instance(self, registry: InstanceRegistry, engine_adapters: dict) -> None:
         class AlwaysOpenCB(CircuitBreaker):
-            def allow_request(self) -> bool: return False
-            def record_success(self) -> None: pass
-            def record_failure(self) -> None: pass
+            def allow_request(self) -> bool:
+                return False
+
+            def record_success(self) -> None:
+                pass
+
+            def record_failure(self) -> None:
+                pass
+
             @property
-            def state(self) -> str: return "open"
+            def state(self) -> str:
+                return "open"
 
         balancer = MagicMock(spec=LoadBalancer)
         balancer.select.return_value = registry.get("i2")
 
         proxy = RoutingProxy(
-            registry=registry, balancer=balancer,
+            registry=registry,
+            balancer=balancer,
             engine_adapters=engine_adapters,
             circuit_breakers={"i1": AlwaysOpenCB()},
         )
         req = InferenceRequest(request_id="r1", model="test-model", messages=[])
         mock_resp = {"message": {"role": "assistant", "content": "OK"}, "eval_count": 1, "prompt_eval_count": 1}
         mock_client = MagicMock()
+
         async def _post(*a, **kw):
-            r = MagicMock(); r.json.return_value = mock_resp; r.status_code = 200; return r
+            r = MagicMock()
+            r.json.return_value = mock_resp
+            r.status_code = 200
+            return r
+
         mock_client.post = _post
 
         with patch.object(proxy, "_get_client", return_value=mock_client):
@@ -120,10 +143,12 @@ class TestCircuitBreakerProxy:
     def test_circuit_breaker_recovery_flow(self) -> None:
         config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.01, half_open_max_calls=1)
         cb = InstanceCircuitBreaker("test", config)
-        cb.record_failure(); cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
         assert cb.state == "open"
 
         import time
+
         time.sleep(0.02)
         assert cb.allow_request() is True
         assert cb.state == "half_open"
@@ -133,20 +158,24 @@ class TestCircuitBreakerProxy:
 
 # ── 3. LoadBalancer(Weighted) → Proxy ────────────────────
 
+
 class TestWeightedBalancerProxy:
     """验证大请求被路由到负载较轻的实例。"""
 
     @pytest.mark.asyncio
     async def test_weighted_routes_large_request_to_light_instance(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
         balancer = WeightedBalancer()
         # 手动设置负载
         balancer._loads["i1"] = 500.0  # heavy
-        balancer._loads["i2"] = 50.0   # light
+        balancer._loads["i2"] = 50.0  # light
 
         req = InferenceRequest(
-            request_id="r1", model="test-model",
+            request_id="r1",
+            model="test-model",
             messages=[{"role": "user", "content": "x" * 400}],
             max_tokens=200,
         )
@@ -157,20 +186,30 @@ class TestWeightedBalancerProxy:
 
 # ── 4. Batch → Proxy ──────────────────────────────────────
 
+
 class TestBatchProxy:
     """验证 batcher.flush() 并发调用 proxy.forward()。"""
 
     @pytest.mark.asyncio
     async def test_batcher_flush_calls_proxy_concurrent(
-        self, registry: InstanceRegistry, engine_adapters: dict,
+        self,
+        registry: InstanceRegistry,
+        engine_adapters: dict,
     ) -> None:
-        proxy = RoutingProxy(registry=registry, balancer=create_balancer("round_robin"), engine_adapters=engine_adapters)
+        proxy = RoutingProxy(
+            registry=registry, balancer=create_balancer("round_robin"), engine_adapters=engine_adapters
+        )
         batcher = DynamicBatcher(proxy, max_batch_size=2, max_wait_ms=5000)
 
         mock_resp = {"message": {"role": "assistant", "content": "OK"}, "eval_count": 1, "prompt_eval_count": 1}
         mock_client = MagicMock()
+
         async def _post(*a, **kw):
-            r = MagicMock(); r.json.return_value = mock_resp; r.status_code = 200; return r
+            r = MagicMock()
+            r.json.return_value = mock_resp
+            r.status_code = 200
+            return r
+
         mock_client.post = _post
 
         with patch.object(proxy, "_get_client", return_value=mock_client):
@@ -184,18 +223,27 @@ class TestBatchProxy:
 
 # ── 5. 熔断器全开时 POST 返回 503 ──────────────────────────
 
+
 class TestAllCircuitBreakersOpen:
     @pytest.mark.asyncio
     async def test_all_breakers_open_returns_503(self, registry: InstanceRegistry, engine_adapters: dict) -> None:
         class AlwaysOpenCB(CircuitBreaker):
-            def allow_request(self) -> bool: return False
-            def record_success(self) -> None: pass
-            def record_failure(self) -> None: pass
+            def allow_request(self) -> bool:
+                return False
+
+            def record_success(self) -> None:
+                pass
+
+            def record_failure(self) -> None:
+                pass
+
             @property
-            def state(self) -> str: return "open"
+            def state(self) -> str:
+                return "open"
 
         proxy = RoutingProxy(
-            registry=registry, balancer=create_balancer("round_robin"),
+            registry=registry,
+            balancer=create_balancer("round_robin"),
             engine_adapters=engine_adapters,
             circuit_breakers={"i1": AlwaysOpenCB(), "i2": AlwaysOpenCB()},
         )
@@ -211,6 +259,7 @@ class TestAllCircuitBreakersOpen:
 
 # ── 6. MetricsRecorder → Proxy ────────────────────────────
 
+
 class TestMetricsProxy:
     """验证转发请求后 metrics 自动记录延迟和 token 消耗。"""
 
@@ -218,15 +267,22 @@ class TestMetricsProxy:
     async def test_metrics_records_on_forward(self, registry: InstanceRegistry, engine_adapters: dict) -> None:
         metrics = PrometheusMetricsRecorder(registry=CollectorRegistry())
         proxy = RoutingProxy(
-            registry=registry, balancer=create_balancer("round_robin"),
-            engine_adapters=engine_adapters, metrics=metrics,
+            registry=registry,
+            balancer=create_balancer("round_robin"),
+            engine_adapters=engine_adapters,
+            metrics=metrics,
         )
         req = InferenceRequest(request_id="r1", model="test-model", messages=[])
 
         mock_resp = {"message": {"role": "assistant", "content": "Hi"}, "eval_count": 5, "prompt_eval_count": 2}
         mock_client = MagicMock()
+
         async def _post(*a, **kw):
-            r = MagicMock(); r.json.return_value = mock_resp; r.status_code = 200; return r
+            r = MagicMock()
+            r.json.return_value = mock_resp
+            r.status_code = 200
+            return r
+
         mock_client.post = _post
 
         with patch.object(proxy, "_get_client", return_value=mock_client):
@@ -238,6 +294,7 @@ class TestMetricsProxy:
 
 
 # ── 7. AutoScaler → MetricsRecorder + Registry ────────────
+
 
 class TestAutoScalerIntegration:
     """验证 evaluate() 正确读取 metrics 汇总数据和实例数量。"""
@@ -271,6 +328,7 @@ class TestAutoScalerIntegration:
 
 # ── 8. Admin API → Registry ───────────────────────────────
 
+
 class TestAdminRegistry:
     """验证通过 Admin API 注册/注销实例后 Registry 状态正确。"""
 
@@ -290,11 +348,16 @@ class TestAdminRegistry:
 
 # ── 9. Admin API → CircuitBreaker ─────────────────────────
 
+
 class TestAdminCircuitBreaker:
     def test_reset_circuit_breaker(self) -> None:
         cb_registry = CircuitBreakerRegistry()
         cb = cb_registry.get_or_create("test-inst")
-        cb.record_failure(); cb.record_failure(); cb.record_failure(); cb.record_failure(); cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
         assert cb.state == "open"
 
         cb = cb_registry.get_or_create("test-inst")
@@ -304,6 +367,7 @@ class TestAdminCircuitBreaker:
 
 
 # ── 10. EngineAdapter(vLLM/TGI) → Proxy ───────────────────
+
 
 class TestEngineAdapters:
     def test_vllm_adapter_build_request(self) -> None:
@@ -315,7 +379,10 @@ class TestEngineAdapters:
 
     def test_vllm_adapter_parse_response(self) -> None:
         adapter = VLLMAdapter()
-        raw = {"choices": [{"message": {"content": "Hello"}}], "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}}
+        raw = {
+            "choices": [{"message": {"content": "Hello"}}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+        }
         resp = adapter.parse_response(raw)
         assert resp.status == "ok"
         assert resp.content == "Hello"
@@ -323,14 +390,21 @@ class TestEngineAdapters:
     def test_tgi_adapter_build_request(self) -> None:
         adapter = TGIAdapter()
         inst = ModelInstance(instance_id="t1", address="http://gpu:8080", model="m", engine_type="tgi")
-        req = InferenceRequest(request_id="r1", model="m", messages=[{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}])
+        req = InferenceRequest(
+            request_id="r1",
+            model="m",
+            messages=[{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}],
+        )
         url, headers, body = adapter.build_request(inst, req)
         assert url == "http://gpu:8080/generate"
         assert "Hello Hi" in body["inputs"]
 
     def test_tgi_adapter_parse_response(self) -> None:
         adapter = TGIAdapter()
-        raw = {"generated_text": "Bonjour", "details": {"generated_tokens": 10, "prefill": [{"text": "hi", "tokens": [1, 2]}]}}
+        raw = {
+            "generated_text": "Bonjour",
+            "details": {"generated_tokens": 10, "prefill": [{"text": "hi", "tokens": [1, 2]}]},
+        }
         resp = adapter.parse_response(raw)
         assert resp.status == "ok"
         assert resp.content == "Bonjour"

@@ -8,23 +8,30 @@ services:
     environment:
       - DISPATCHER_PORT=9090
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
   mock-engine-1:
-    build:
-      context: .
-      dockerfile: Dockerfile.mock
+    image: python:3.11-slim
     ports:
       - "8001:8001"
-    command: ["uv", "run", "python", "scripts/mock_engine.py", "--port", "8001", "--engine", "ollama"]
+    volumes:
+      - ./scripts:/app/scripts:ro
+    working_dir: /app
+    command: ["python", "scripts/mock_engine.py", "--port", "8001", "--engine", "ollama"]
+    depends_on:
+      - dispatcher
 
   mock-engine-2:
-    build:
-      context: .
-      dockerfile: Dockerfile.mock
+    image: python:3.11-slim
     ports:
       - "8002:8002"
-    command: ["uv", "run", "python", "scripts/mock_engine.py", "--port", "8002", "--engine", "ollama"]
+    volumes:
+      - ./scripts:/app/scripts:ro
+    working_dir: /app
+    command: ["python", "scripts/mock_engine.py", "--port", "8002", "--engine", "ollama"]
+    depends_on:
+      - dispatcher

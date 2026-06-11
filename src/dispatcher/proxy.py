@@ -13,8 +13,8 @@ from typing import Optional
 
 import httpx
 
-from src.dispatcher.registry import InstanceRegistry
 from src.dispatcher.circuit_breaker import CircuitBreakerRegistry
+from src.dispatcher.registry import InstanceRegistry
 from src.shared.models import (
     CircuitBreaker,
     EngineAdapter,
@@ -53,7 +53,9 @@ class RoutingProxy:
         self._balancer = balancer
         self._engine_adapters = engine_adapters
         self._cb_dict: dict[str, CircuitBreaker] = circuit_breakers if isinstance(circuit_breakers, dict) else {}  # type: ignore[assignment]
-        self._cb_registry: CircuitBreakerRegistry | None = circuit_breakers if isinstance(circuit_breakers, CircuitBreakerRegistry) else None  # type: ignore[assignment]
+        self._cb_registry: CircuitBreakerRegistry | None = (
+            circuit_breakers if isinstance(circuit_breakers, CircuitBreakerRegistry) else None
+        )  # type: ignore[assignment]
         self._metrics = metrics
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
@@ -294,11 +296,7 @@ class RoutingProxy:
         """过滤掉熔断器 OPEN 的实例。"""
         if not self._has_circuit_breakers():
             return candidates
-        return [
-            inst
-            for inst in candidates
-            if (cb := self._get_cb(inst.instance_id)) is None or cb.allow_request()
-        ]
+        return [inst for inst in candidates if (cb := self._get_cb(inst.instance_id)) is None or cb.allow_request()]
 
     def _get_adapter(self, instance: ModelInstance) -> EngineAdapter:
         """获取实例对应的引擎适配器。"""

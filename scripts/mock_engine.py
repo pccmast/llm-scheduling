@@ -21,7 +21,6 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-
 app = FastAPI(title="Mock LLM Engine", version="1.0.0")
 
 # ── 全局配置 ───────────────────────────────────────────────
@@ -53,8 +52,7 @@ def generate_mock_response(messages: list[dict], model: str = "mock-model") -> d
 
     if user_content:
         assistant_content = (
-            f"这是对「{user_content[:50]}」的模拟回复。"
-            f"Mock engine 运行在端口 {PORT}，使用 {ENGINE_TYPE} 引擎格式。"
+            f"这是对「{user_content[:50]}」的模拟回复。Mock engine 运行在端口 {PORT}，使用 {ENGINE_TYPE} 引擎格式。"
         )
     else:
         assistant_content = "Mock engine 模拟回复 — 没有收到用户消息。"
@@ -72,6 +70,7 @@ def generate_mock_response(messages: list[dict], model: str = "mock-model") -> d
 
 # ── 健康检查 ───────────────────────────────────────────────
 
+
 @app.get("/health")
 async def health_check() -> dict:
     """健康检查端点 — 所有引擎共用。"""
@@ -88,6 +87,7 @@ async def ollama_health() -> dict:
 
 # ── Ollama 格式 ────────────────────────────────────────────
 
+
 @app.post("/api/chat")
 async def ollama_chat(request: Request) -> dict:
     """Ollama /api/chat 端点 — 非流式。"""
@@ -103,7 +103,6 @@ async def ollama_chat(request: Request) -> dict:
         pass
 
     mock = generate_mock_response(messages, model)
-    request_id = str(uuid.uuid4())
 
     return {
         "model": model,
@@ -145,6 +144,7 @@ async def ollama_generate(request: Request) -> dict:
 
 
 # ── OpenAI/vLLM 格式 ───────────────────────────────────────
+
 
 @app.post("/v1/chat/completions", response_model=None)
 async def openai_chat_completions(request: Request):
@@ -330,6 +330,7 @@ async def _sse_completion_stream(body: dict):
 
 # ── TGI 格式 ───────────────────────────────────────────────
 
+
 @app.post("/generate")
 async def tgi_generate(request: Request) -> dict:
     """TGI /generate 端点。"""
@@ -337,8 +338,6 @@ async def tgi_generate(request: Request) -> dict:
     await maybe_async_delay()
 
     inputs = body.get("inputs", "")
-    parameters = body.get("parameters", {})
-    model = body.get("model", "mock-model")
 
     assistant_content = f"这是对「{inputs[:50]}」的 TGI 模拟生成。"
 
@@ -384,6 +383,7 @@ async def reset_fail() -> dict:
 
 # ── 全局中间件：故障注入 ────────────────────────────────────
 
+
 @app.middleware("http")
 async def fault_injection_middleware(request: Request, call_next):
     """在 /admin 以外的路径注入故障，模拟引擎异常。"""
@@ -420,11 +420,14 @@ async def fault_injection_middleware(request: Request, call_next):
 
 # ── CLI 入口 ────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Mock LLM Engine — 模拟推理引擎 HTTP 服务")
     parser.add_argument("--port", type=int, default=8001, help="监听端口（默认: 8001）")
     parser.add_argument("--latency", type=float, default=0.1, help="模拟推理延迟（秒，默认: 0.1）")
-    parser.add_argument("--engine", choices=["ollama", "vllm", "tgi"], default="ollama", help="模拟的引擎类型（默认: ollama）")
+    parser.add_argument(
+        "--engine", choices=["ollama", "vllm", "tgi"], default="ollama", help="模拟的引擎类型（默认: ollama）"
+    )
     args = parser.parse_args()
 
     global ENGINE_TYPE, SIMULATED_LATENCY, PORT
@@ -435,7 +438,7 @@ def main() -> None:
     print(f"[Mock Engine] 启动 {ENGINE_TYPE} 模拟引擎")
     print(f"[Mock Engine] 监听 0.0.0.0:{PORT}")
     print(f"[Mock Engine] 模拟延迟: {SIMULATED_LATENCY}s")
-    print(f"[Mock Engine] 端点:")
+    print("[Mock Engine] 端点:")
     print(f"  - GET  http://localhost:{PORT}/health")
     if ENGINE_TYPE == "ollama":
         print(f"  - POST http://localhost:{PORT}/api/chat")

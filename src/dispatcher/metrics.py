@@ -11,39 +11,68 @@ class PrometheusMetricsRecorder(MetricsRecorder):
     """基于 prometheus-client 的指标收集器。"""
 
     def __init__(self, registry: CollectorRegistry | None = None) -> None:
-        reg_kwargs = {"registry": registry} if registry is not None else {}
-
-        self._requests_total = Counter(
-            "dispatcher_requests_total", "Total requests",
-            ["instance_id", "status"], **reg_kwargs,
-        )
-        self._request_latency_ms = Histogram(
-            "dispatcher_request_latency_ms", "Latency ms",
-            ["instance_id"],
-            buckets=[50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000],
-            **reg_kwargs,
-        )
-        self._request_ttft_ms = Histogram(
-            "dispatcher_request_ttft_ms", "TTFT ms",
-            ["instance_id"],
-            buckets=[50, 100, 200, 500, 1000, 2000],
-            **reg_kwargs,
-        )
-        self._tokens_total = Counter(
-            "dispatcher_tokens_total", "Tokens processed",
-            ["instance_id", "type"], **reg_kwargs,
-        )
-        self._queue_depth = Gauge(
-            "dispatcher_queue_depth", "Queue depth", **reg_kwargs,
-        )
-        self._errors_total = Counter(
-            "dispatcher_errors_total", "Total errors",
-            ["instance_id", "error_type"], **reg_kwargs,
-        )
-        self._batch_size = Histogram(
-            "dispatcher_batch_size", "Batch size",
-            buckets=[1, 2, 4, 8, 16, 32], **reg_kwargs,
-        )
+        if registry is not None:
+            self._requests_total = Counter(
+                "dispatcher_requests_total", "Total requests",
+                ["instance_id", "status"], registry=registry,
+            )
+            self._request_latency_ms = Histogram(
+                "dispatcher_request_latency_ms", "Latency ms",
+                ["instance_id"],
+                buckets=[50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000],
+                registry=registry,
+            )
+            self._request_ttft_ms = Histogram(
+                "dispatcher_request_ttft_ms", "TTFT ms",
+                ["instance_id"],
+                buckets=[50, 100, 200, 500, 1000, 2000],
+                registry=registry,
+            )
+            self._tokens_total = Counter(
+                "dispatcher_tokens_total", "Tokens processed",
+                ["instance_id", "type"], registry=registry,
+            )
+            self._queue_depth = Gauge(
+                "dispatcher_queue_depth", "Queue depth", registry=registry,
+            )
+            self._errors_total = Counter(
+                "dispatcher_errors_total", "Total errors",
+                ["instance_id", "error_type"], registry=registry,
+            )
+            self._batch_size = Histogram(
+                "dispatcher_batch_size", "Batch size",
+                buckets=[1, 2, 4, 8, 16, 32], registry=registry,
+            )
+        else:
+            self._requests_total = Counter(
+                "dispatcher_requests_total", "Total requests",
+                ["instance_id", "status"],
+            )
+            self._request_latency_ms = Histogram(
+                "dispatcher_request_latency_ms", "Latency ms",
+                ["instance_id"],
+                buckets=[50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000],
+            )
+            self._request_ttft_ms = Histogram(
+                "dispatcher_request_ttft_ms", "TTFT ms",
+                ["instance_id"],
+                buckets=[50, 100, 200, 500, 1000, 2000],
+            )
+            self._tokens_total = Counter(
+                "dispatcher_tokens_total", "Tokens processed",
+                ["instance_id", "type"],
+            )
+            self._queue_depth = Gauge(
+                "dispatcher_queue_depth", "Queue depth",
+            )
+            self._errors_total = Counter(
+                "dispatcher_errors_total", "Total errors",
+                ["instance_id", "error_type"],
+            )
+            self._batch_size = Histogram(
+                "dispatcher_batch_size", "Batch size",
+                buckets=[1, 2, 4, 8, 16, 32],
+            )
 
         self._latencies: dict[str, list[float]] = {}
         self._request_count: int = 0
@@ -77,8 +106,8 @@ class PrometheusMetricsRecorder(MetricsRecorder):
 
     def get_summary(self) -> dict:
         all_lats: list[float] = []
-        for lats in self._latencies.values():
-            all_lats.extend(lats)
+        for lat_list in self._latencies.values():
+            all_lats.extend(lat_list)
         if all_lats:
             s = sorted(all_lats)
             p95 = s[min(int(len(s) * 0.95), len(s) - 1)]
@@ -88,8 +117,9 @@ class PrometheusMetricsRecorder(MetricsRecorder):
             avg, p95, p99 = 0.0, 0.0, 0.0
 
         per_instance = {
-            i: {"request_count": len(l), "avg_latency_ms": sum(l) / len(l) if l else 0}
-            for i, l in self._latencies.items() if l
+            inst: {"request_count": len(lats), "avg_latency_ms": sum(lats) / len(lats) if lats else 0}
+            for inst, lats in self._latencies.items()
+            if lats
         }
         return {
             "request_count": self._request_count, "error_count": self._error_count,
