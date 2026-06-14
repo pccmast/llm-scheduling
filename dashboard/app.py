@@ -10,13 +10,13 @@ st.set_page_config(page_title="LLM Dispatcher", layout="wide")
 
 pages = {
     "Overview": [
-        st.Page("dashboard/pages/overview.py", title="全局概览", icon="📊"),
+        st.Page("pages/overview.py", title="全局概览", icon="📊"),
     ],
     "Instances": [
-        st.Page("dashboard/pages/instances.py", title="实例详情", icon="🖥️"),
+        st.Page("pages/instances.py", title="实例详情", icon="🖥️"),
     ],
     "Scaling": [
-        st.Page("dashboard/pages/scaling.py", title="扩缩容", icon="📈"),
+        st.Page("pages/scaling.py", title="扩缩容", icon="📈"),
     ],
 }
 
