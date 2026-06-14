@@ -45,11 +45,17 @@ curl -X POST http://localhost:9090/v1/chat/completions \
 ## 完整演示
 
 ```bash
-# 一键运行端到端演示（自动启动服务、注册实例、熔断测试、指标查看）
+# 一键运行端到端演示（自动启动服务、注册实例、9 阶段功能验证）
 uv run python scripts/demo.py
+```
 
-# Dashboard
+## Streamlit Dashboard
+
+```bash
+# 启动可视化控制台（需先启动调度服务）
 uv run streamlit run dashboard/app.py
+# 浏览器打开 http://localhost:8501
+# 可查看实例负载、队列深度、延迟分布、熔断器状态等
 ```
 
 ## 环境变量
@@ -155,16 +161,26 @@ uv run ruff check src/ tests/        # Lint
 ## Docker
 
 ```bash
-# 启动完整环境（dispatcher + 2 个 mock 引擎，自动注册）
+# 构建镜像
+docker compose build
+
+# 启动完整环境（dispatcher + 2 个 mock 引擎，init 容器自动注册）
 docker compose up -d
 
-# 等待 init 容器完成注册（约 15s），然后测试推理
+# 查看启动状态及 init 日志
+docker compose ps
+docker compose logs init        # 确认 "Init complete" 字样
+
+# 测试推理
 curl -X POST http://localhost:9090/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"test-model","messages":[{"role":"user","content":"Hello Docker!"}]}'
 
-# 查看状态
+# 查看管理状态
 curl http://localhost:9090/admin/status
+
+# 停止并清理
+docker compose down
 ```
 
 ## 技术栈
