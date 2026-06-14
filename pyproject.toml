@@ -12,6 +12,9 @@ dependencies = [
     "pyyaml",
     "prometheus-client>=0.20",
     "structlog",
+    "opentelemetry-api>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
 ]
 
 [project.optional-dependencies]

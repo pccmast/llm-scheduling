@@ -13,6 +13,8 @@ from collections.abc import AsyncIterator
 from typing import Optional
 
 import httpx
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 from src.dispatcher.circuit_breaker import CircuitBreakerRegistry
 from src.dispatcher.registry import InstanceRegistry
@@ -106,19 +108,35 @@ class RoutingProxy:
         instance: Optional[ModelInstance] = None
         self._active_requests += 1
 
+        tracer = trace.get_tracer(__name__)
+        root_span = tracer.start_span(
+            "forward",
+            attributes={
+                "request_id": request.request_id,
+                "model": request.model,
+                "priority": request.priority,
+                "estimated_weight": request.estimated_weight,
+                "stream": request.stream,
+            },
+        )
+
         try:
-            # 1. 获取候选实例
-            candidates = self._registry.list_by_model(request.model)
-            if not candidates:
-                raise NoAvailableInstanceError(request.model)
+            with tracer.start_as_current_span("balancer_select") as select_span:
+                # 1. 获取候选实例
+                candidates = self._registry.list_by_model(request.model)
+                select_span.set_attribute("candidates_count", len(candidates))
+                if not candidates:
+                    raise NoAvailableInstanceError(request.model)
 
-            # 2. 过滤熔断器 OPEN 的实例
-            available = self._filter_by_circuit_breaker(candidates)
-            if not available:
-                raise NoAvailableInstanceError(request.model)
+                # 2. 过滤熔断器 OPEN 的实例
+                available = self._filter_by_circuit_breaker(candidates)
+                select_span.set_attribute("available_count", len(available))
+                if not available:
+                    raise NoAvailableInstanceError(request.model)
 
-            # 3. 选择实例
-            instance = self._balancer.select(available, request)
+                # 3. 选择实例
+                instance = self._balancer.select(available, request)
+                select_span.set_attribute("selected_instance", instance.instance_id)
 
             # 4. 记录请求开始
             self._balancer.on_request_start(instance.instance_id, request)
@@ -128,11 +146,17 @@ class RoutingProxy:
             url, headers, body = adapter.build_request(instance, request)
 
             # 6. 转发
-            client = self._get_client()
-            response = await client.post(url, json=body, headers=headers, timeout=self._timeout)
+            with tracer.start_as_current_span("engine_inference") as infer_span:
+                infer_span.set_attribute("instance_id", instance.instance_id)
+                infer_span.set_attribute("engine_type", instance.engine_type)
+                client = self._get_client()
+                response = await client.post(url, json=body, headers=headers, timeout=self._timeout)
+                infer_span.set_attribute("http_status_code", response.status_code)
 
             # 6a. 检查 HTTP 状态码
             if response.status_code >= 500:
+                root_span.set_status(Status(StatusCode.ERROR, f"Upstream returned {response.status_code}"))
+                root_span.set_attribute("error", True)
                 error_resp = InferenceResponse(
                     request_id=request.request_id,
                     instance_id=instance.instance_id,
@@ -146,10 +170,11 @@ class RoutingProxy:
             raw = response.json()
 
             # 7. 解析响应
-            inference_response = adapter.parse_response(raw)
-            inference_response.request_id = request.request_id
-            inference_response.instance_id = instance.instance_id
-            inference_response.latency_ms = (time.monotonic() - start_time) * 1000
+            with tracer.start_as_current_span("parse_response"):
+                inference_response = adapter.parse_response(raw)
+                inference_response.request_id = request.request_id
+                inference_response.instance_id = instance.instance_id
+                inference_response.latency_ms = (time.monotonic() - start_time) * 1000
 
             # 8. 更新熔断器
             cb = self._get_cb(instance.instance_id)
@@ -167,11 +192,16 @@ class RoutingProxy:
                     success=True,
                 )
 
+            root_span.set_attribute("success", True)
             return inference_response
 
         except NoAvailableInstanceError:
+            root_span.set_status(Status(StatusCode.ERROR, "No available instance"))
+            root_span.set_attribute("error", True)
             raise
         except httpx.TimeoutException:
+            root_span.set_status(Status(StatusCode.ERROR, "Upstream timeout"))
+            root_span.set_attribute("error", True)
             error_resp = InferenceResponse(
                 request_id=request.request_id,
                 instance_id=instance.instance_id if instance else "",
@@ -182,6 +212,8 @@ class RoutingProxy:
             self._record_failure(instance, error_resp, request, start_time)
             return error_resp
         except httpx.ConnectError:
+            root_span.set_status(Status(StatusCode.ERROR, "Connection refused"))
+            root_span.set_attribute("error", True)
             error_resp = InferenceResponse(
                 request_id=request.request_id,
                 instance_id=instance.instance_id if instance else "",
@@ -192,6 +224,9 @@ class RoutingProxy:
             self._record_failure(instance, error_resp, request, start_time)
             return error_resp
         except Exception as exc:
+            root_span.set_status(Status(StatusCode.ERROR, str(exc)))
+            root_span.set_attribute("error", True)
+            root_span.record_exception(exc)
             error_resp = InferenceResponse(
                 request_id=request.request_id,
                 instance_id=instance.instance_id if instance else "",
@@ -202,6 +237,9 @@ class RoutingProxy:
             self._record_failure(instance, error_resp, request, start_time)
             return error_resp
         finally:
+            latency_ms = (time.monotonic() - start_time) * 1000
+            root_span.set_attribute("total_latency_ms", latency_ms)
+            root_span.end()
             if instance:
                 self._balancer.on_request_end(instance.instance_id, request)
             self._active_requests -= 1
@@ -230,19 +268,35 @@ class RoutingProxy:
         self._active_requests += 1
         usage = TokenUsage()
 
+        tracer = trace.get_tracer(__name__)
+        root_span = tracer.start_span(
+            "forward_stream",
+            attributes={
+                "request_id": request.request_id,
+                "model": request.model,
+                "priority": request.priority,
+                "estimated_weight": request.estimated_weight,
+            },
+        )
+
         try:
-            # 1. 获取候选实例
-            candidates = self._registry.list_by_model(request.model)
-            if not candidates:
-                raise NoAvailableInstanceError(request.model)
+            with tracer.start_as_current_span("balancer_select") as select_span:
+                # 1. 获取候选实例
+                candidates = self._registry.list_by_model(request.model)
+                select_span.set_attribute("candidates_count", len(candidates))
+                if not candidates:
+                    raise NoAvailableInstanceError(request.model)
 
-            # 2. 过滤熔断器 OPEN
-            available = self._filter_by_circuit_breaker(candidates)
-            if not available:
-                raise NoAvailableInstanceError(request.model)
+                # 2. 过滤熔断器 OPEN
+                available = self._filter_by_circuit_breaker(candidates)
+                select_span.set_attribute("available_count", len(available))
+                if not available:
+                    raise NoAvailableInstanceError(request.model)
 
-            # 3. 选择实例
-            instance = self._balancer.select(available, request)
+                # 3. 选择实例
+                instance = self._balancer.select(available, request)
+                select_span.set_attribute("selected_instance", instance.instance_id)
+
             self._balancer.on_request_start(instance.instance_id, request)
 
             # 4. 构建请求
@@ -250,16 +304,23 @@ class RoutingProxy:
             url, headers, body = adapter.build_request(instance, request)
 
             # 5. 流式转发
-            client = self._get_client()
-            last_chunk = ""
-            async with client.stream("POST", url, json=body, headers=headers, timeout=self._timeout) as response:
-                async for line in response.aiter_lines():
-                    if not ttft_recorded and line.startswith("data:") and "content" in line:
-                        ttft_ms = (time.monotonic() - start_time) * 1000
-                        ttft_recorded = True
+            with tracer.start_as_current_span("engine_inference") as infer_span:
+                infer_span.set_attribute("instance_id", instance.instance_id)
+                infer_span.set_attribute("engine_type", instance.engine_type)
 
-                    last_chunk = line
-                    yield line + "\n"
+                client = self._get_client()
+                last_chunk = ""
+                async with client.stream("POST", url, json=body, headers=headers, timeout=self._timeout) as response:
+                    async for line in response.aiter_lines():
+                        if not ttft_recorded and line.startswith("data:") and "content" in line:
+                            ttft_ms = (time.monotonic() - start_time) * 1000
+                            ttft_recorded = True
+                            infer_span.set_attribute("ttft_ms", ttft_ms)
+
+                        last_chunk = line
+                        yield line + "\n"
+
+                infer_span.set_attribute("ttft_recorded", ttft_recorded)
 
             # 从最后一个 SSE chunk 解析 usage（引擎在流末尾报告 token 数）
             usage = self._parse_stream_usage(last_chunk)
@@ -278,9 +339,16 @@ class RoutingProxy:
                     success=True,
                 )
 
+            root_span.set_attribute("success", True)
+
         except NoAvailableInstanceError:
+            root_span.set_status(Status(StatusCode.ERROR, "No available instance"))
+            root_span.set_attribute("error", True)
             raise
         except Exception as exc:
+            root_span.set_status(Status(StatusCode.ERROR, str(exc)))
+            root_span.set_attribute("error", True)
+            root_span.record_exception(exc)
             error_event = json.dumps(
                 {
                     "error": {"message": str(exc), "type": type(exc).__name__},
@@ -301,6 +369,9 @@ class RoutingProxy:
                     success=False,
                 )
         finally:
+            latency_ms = (time.monotonic() - start_time) * 1000
+            root_span.set_attribute("total_latency_ms", latency_ms)
+            root_span.end()
             if instance:
                 self._balancer.on_request_end(instance.instance_id, request)
             self._active_requests -= 1

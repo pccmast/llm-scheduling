@@ -23,6 +23,7 @@ from src.dispatcher.proxy import RoutingProxy
 from src.dispatcher.queue import RequestQueue
 from src.dispatcher.registry import InstanceRegistry
 from src.dispatcher.scaler import AutoScaler
+from src.dispatcher.tracing import init_tracing, shutdown_tracing
 from src.shared.config import load_config, load_yaml_config
 from src.shared.logging import get_logger, setup_logging
 from src.shared.models import (
@@ -42,6 +43,9 @@ async def lifespan(app: FastAPI):
     settings = load_config()
     yaml_config = load_yaml_config()
     setup_logging(settings.log_level)
+
+    # 0. 初始化分布式追踪（OpenTelemetry）
+    init_tracing(service_name="llm-dispatcher")
 
     # 1. Registry + 实例加载
     registry = InstanceRegistry()
@@ -147,6 +151,10 @@ async def lifespan(app: FastAPI):
 
     # 3. 关闭连接池
     await proxy.close()
+
+    # 4. 刷新并关闭追踪
+    shutdown_tracing()
+
     logger.info("LLM Dispatcher stopped")
 
 
