@@ -208,11 +208,17 @@ async def main():
                 timeout=30,
             ) as resp:
                 async for line in resp.aiter_lines():
-                    if line.startswith("data:") and "content" in line:
+                    if not line.strip():
+                        continue
+                    # Ollama 格式: 原始 JSON 行; OpenAI/vLLM 格式: data: {...}
+                    is_chunk = (
+                        (line.startswith('data:') and '"content"' in line)
+                        or (line.startswith('{') and '"message"' in line)
+                    )
+                    if is_chunk:
                         chunk_count += 1
                         if chunk_count <= 3:
-                            # 打印前 3 个 chunk 预览
-                            preview = line[:80]
+                            preview = line[:90]
                             print(f"    chunk #{chunk_count}: {preview}...")
                 check(f"流式响应完成 (收到 {chunk_count} 个 chunk)", chunk_count > 0)
 

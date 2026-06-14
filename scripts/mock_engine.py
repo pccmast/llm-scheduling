@@ -88,20 +88,21 @@ async def ollama_health() -> dict:
 # ── Ollama 格式 ────────────────────────────────────────────
 
 
-@app.post("/api/chat")
-async def ollama_chat(request: Request) -> dict:
-    """Ollama /api/chat 端点 — 非流式。"""
+@app.post("/api/chat", response_model=None)
+async def ollama_chat(request: Request):
+    """Ollama /api/chat 端点 — 支持流式和非流式。"""
     body = await request.json()
-    await maybe_async_delay()
-
     model = body.get("model", "mock-model")
     messages = body.get("messages", [])
     is_stream = body.get("stream", False)
 
     if is_stream:
-        # 流式请求返回非流式响应（简单处理）
-        pass
+        return StreamingResponse(
+            _ollama_stream(body),
+            media_type="application/x-ndjson",
+        )
 
+    await maybe_async_delay()
     mock = generate_mock_response(messages, model)
 
     return {
@@ -236,6 +237,38 @@ async def openai_completions(request: Request):
             "total_tokens": max(1, len(prompt) // 4) + max(10, len(assistant_content) // 3),
         },
     }
+
+
+async def _ollama_stream(body: dict):
+    """生成 Ollama 风格的流式响应（每行一个 JSON 对象）。"""
+    model = body.get("model", "mock-model")
+    messages = body.get("messages", [])
+    mock = generate_mock_response(messages, model)
+    content = mock["content"]
+    created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+
+    # 逐字符发送，模拟流式 token 生成
+    for i, _ch in enumerate(content):
+        chunk = {
+            "model": model,
+            "created_at": created_at,
+            "message": {"role": "assistant", "content": content[: i + 1]},
+            "done": False,
+        }
+        yield json.dumps(chunk, ensure_ascii=False) + "\n"
+        await asyncio.sleep(0.01)
+
+    # 结束帧
+    final = {
+        "model": model,
+        "created_at": created_at,
+        "message": {"role": "assistant", "content": content},
+        "done": True,
+        "total_duration": int(SIMULATED_LATENCY * 1e9),
+        "prompt_eval_count": mock["prompt_tokens"],
+        "eval_count": mock["completion_tokens"],
+    }
+    yield json.dumps(final, ensure_ascii=False) + "\n"
 
 
 async def _sse_stream(body: dict):
