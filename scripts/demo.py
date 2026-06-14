@@ -400,28 +400,80 @@ async def main():
             # ══════════════════════════════════════════════════════════════
             section_header(
                 "阶段 8/9 — 可观测性与扩缩容评估",
-                "查看 Prometheus 指标汇总 + 扩缩容决策评估",
+                "查看 Prometheus 指标汇总 + 直接演示 AutoScaler 决策逻辑",
             )
 
             # 8a. 指标汇总
             r = await client.get(f"{DISPATCHER_URL}/admin/metrics/summary")
             if r.status_code == 200:
                 s = r.json()
-                print(f"  {title('指标汇总')}:")
+                print(f"  {title('8a. Prometheus 指标汇总')}:")
                 check(f"总请求数: {s.get('request_count', 0)}", True)
                 check(f"错误数:   {s.get('error_count', 0)}", True)
                 check(f"平均延迟: {s.get('avg_latency_ms', 0):.1f} ms", True)
                 check(f"P95 延迟: {s.get('p95_latency_ms', 0):.1f} ms", True)
                 check(f"P99 延迟: {s.get('p99_latency_ms', 0):.1f} ms", True)
 
-            # 8b. 扩缩容评估
-            print(f"\n  {title('扩缩容评估')}:")
-            r = await client.get(f"{DISPATCHER_URL}/admin/scaling/evaluate")
-            scale = r.json()
-            check(f"决策: {scale.get('action', '?')} — {scale.get('reason', '')}", True)
+            # 8b. 扩缩容决策（直接演示 — 默认 disabled，不经过 HTTP）
+            print(f"\n  {title('8b. AutoScaler 决策引擎')}: 直接构造 AutoScaler 演示...")
+            from src.dispatcher.balancer import create_balancer
+            from src.dispatcher.registry import InstanceRegistry as DemoRegistry
+            from src.shared.models import ModelInstance as DemoInstance
+            from src.shared.models import ScaleConfig
+
+            # 构造场景：2 个实例 + queue_depth=15（触发扩容）
+            r2 = DemoRegistry()
+            for i in range(2):
+                r2.register(DemoInstance(
+                    instance_id=f"gpu-{i+1}",
+                    address=f"http://gpu-{i+1}:8000",
+                    model="test-model",
+                    engine_type="ollama",
+                ))
+
+            balancer = create_balancer("weighted")
+            # 模拟 gpu-1 有 5 个活跃请求（每个 ≈2000 weight），gpu-2 空闲
+            for _ in range(5):
+                balancer.on_request_start("gpu-1")
+
+            cfg = ScaleConfig(
+                scale_up_queue_threshold=10,
+                scale_up_load_threshold=8000.0,
+                scale_down_idle_seconds=300,
+                scale_down_load_threshold=500.0,
+                min_instances=1,
+                max_instances=10,
+                cooldown_seconds=0,
+            )
+
+            # 演示 3 种场景
+            print(f"    {info('场景 1 (扩容)')}: queue_depth=15 + gpu-1 负载 {balancer.get_load('gpu-1'):.0f}")
+            # 需要拿到 metrics 的 queue_depth……使用 mock
+            class _FakeMetrics:
+                def get_summary(self):
+                    return {"queue_depth": 15}
+                def record_queue_depth(self, _d): pass
+
+            from src.dispatcher.scaler import AutoScaler
+            scaler = AutoScaler(r2, _FakeMetrics(), cfg, balancer=balancer)
+            d1 = scaler.evaluate()
+            check(f"决策: {d1.action} ({d1.reason[:60]}...)", d1.action == "scale_up")
+
+            print(f"\n    {info('场景 2 (不扩容)')}: queue_depth=3 + 低负载")
+            _m2 = type("_M", (), {"get_summary": lambda s: {"queue_depth": 3}})()
+            scaler2 = AutoScaler(r2, _m2(), cfg, balancer=balancer)
+            d2 = scaler2.evaluate()
+            check(f"决策: {d2.action} ({d2.reason})", d2.action == "none")
+
+            print(f"\n    {info('场景 3 (缩容)')}: queue_depth=0 + 无负载 + 空闲 > 300s")
+            _m3 = type("_M", (), {"get_summary": lambda s: {"queue_depth": 0}})()
+            scaler3 = AutoScaler(r2, _m3(), cfg, balancer=balancer)
+            scaler3._idle_since = time.monotonic() - 400  # 手动设置空闲时间
+            d3 = scaler3.evaluate()
+            check(f"决策: {d3.action} ({d3.reason[:60]}...)", d3.action == "scale_down")
 
             # 8c. 全局状态
-            print(f"\n  {title('全局状态')}:")
+            print(f"\n  {title('8c. 全局状态')}:")
             r = await client.get(f"{DISPATCHER_URL}/admin/status")
             final = r.json()
             print(f"    实例: total={final['instances']['total']} "
