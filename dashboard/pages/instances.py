@@ -13,13 +13,24 @@ try:
         instances = resp.json()
         if instances:
             for inst in instances:
-                with st.expander(f"{inst['instance_id']} — {inst['model']} ({inst['engine_type']})", expanded=True):
-                    st.write(f"**地址**: {inst['address']}")
-                    st.write(f"**状态**: {inst['status']}")
-                    st.write(f"**引擎**: {inst['engine_type']}")
-                    st.write(f"**容量因子**: {inst.get('capacity_factor', 1.0)}")
-                    st.write(f"**最大并发**: {inst.get('max_concurrent', 10)}")
+                status_icon = {"healthy": "🟢", "unhealthy": "🔴", "draining": "🟡"}.get(
+                    inst.get("status", ""), "❓"
+                )
+                with st.expander(
+                    f"{status_icon} {inst['instance_id']} — {inst['model']} ({inst['engine_type']})",
+                    expanded=True,
+                ):
+                    col1, col2 = st.columns(2)
+                    col1.write(f"**地址**: `{inst['address']}`")
+                    col1.write(f"**引擎**: {inst['engine_type']}")
+                    col2.write(f"**状态**: {inst['status']}")
+                    col2.write(f"**容量因子**: {inst.get('capacity_factor', 1.0)}")
+                    col2.write(f"**最大并发**: {inst.get('max_concurrent', 10)}")
         else:
-            st.info("暂未注册实例")
+            st.info("暂未注册实例 — 通过 `POST /admin/instances` 注册")
+    else:
+        st.error(f"实例接口返回 HTTP {resp.status_code}: {resp.text[:200]}")
 except requests.ConnectionError:
-    st.warning("无法连接调度服务")
+    st.warning(f"无法连接调度服务 (`{API_BASE}`) — 请确认服务已启动")
+except requests.Timeout:
+    st.warning("实例接口请求超时")

@@ -23,6 +23,8 @@ try:
         if reason:
             st.info(reason)
     else:
-        st.warning("无法获取扩缩容评估")
+        st.error(f"扩缩容接口返回 HTTP {resp.status_code}: {resp.text[:200]}")
 except requests.ConnectionError:
-    st.warning("无法连接调度服务")
+    st.warning(f"无法连接调度服务 (`{API_BASE}`) — 请确认服务已启动")
+except requests.Timeout:
+    st.warning("扩缩容接口请求超时")
