@@ -45,6 +45,7 @@ def client(registry: InstanceRegistry) -> TestClient:
     proxy_mock = MagicMock()
     proxy_mock.forward = AsyncMock()
     proxy_mock.forward_stream = MagicMock()
+    proxy_mock._draining = False  # 优雅停机状态（测试中始终为 False）
     app.state.proxy = proxy_mock
     app.state.health_checker = MagicMock()
     app.state.settings = MagicMock(port=9090)

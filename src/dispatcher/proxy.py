@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
@@ -17,6 +18,7 @@ from src.dispatcher.circuit_breaker import CircuitBreakerRegistry
 from src.dispatcher.registry import InstanceRegistry
 from src.shared.models import (
     CircuitBreaker,
+    DrainInProgressError,
     EngineAdapter,
     InferenceRequest,
     InferenceResponse,
@@ -60,6 +62,10 @@ class RoutingProxy:
         self._metrics = metrics
         self._timeout = timeout
         self._client: httpx.AsyncClient | None = None
+        # Graceful shutdown state
+        self._active_requests: int = 0
+        self._draining: bool = False
+        self._drain_event: asyncio.Event = asyncio.Event()
 
     def _get_client(self) -> httpx.AsyncClient:
         """获取或创建 httpx 客户端。"""
@@ -93,8 +99,12 @@ class RoutingProxy:
         Postcondition:
             balancer.on_request_end() 和 metrics.record_request() 一定被调用。
         """
+        if self._draining:
+            raise DrainInProgressError()
+
         start_time = time.monotonic()
         instance: Optional[ModelInstance] = None
+        self._active_requests += 1
 
         try:
             # 1. 获取候选实例
@@ -194,6 +204,9 @@ class RoutingProxy:
         finally:
             if instance:
                 self._balancer.on_request_end(instance.instance_id, request)
+            self._active_requests -= 1
+            if self._draining and self._active_requests == 0:
+                self._drain_event.set()
 
     async def forward_stream(self, request: InferenceRequest) -> AsyncIterator[str]:
         """转发流式推理请求，返回 SSE chunk 的异步迭代器。
@@ -207,10 +220,14 @@ class RoutingProxy:
         Raises:
             NoAvailableInstanceError: 没有可用的健康实例。
         """
+        if self._draining:
+            raise DrainInProgressError()
+
         start_time = time.monotonic()
         ttft_recorded = False
         ttft_ms = 0.0
         instance: Optional[ModelInstance] = None
+        self._active_requests += 1
         usage = TokenUsage()
 
         try:
@@ -286,6 +303,9 @@ class RoutingProxy:
         finally:
             if instance:
                 self._balancer.on_request_end(instance.instance_id, request)
+            self._active_requests -= 1
+            if self._draining and self._active_requests == 0:
+                self._drain_event.set()
 
     def _get_cb(self, instance_id: str) -> CircuitBreaker | None:
         """获取实例的熔断器（支持 dict 和 CircuitBreakerRegistry）。"""
@@ -371,6 +391,33 @@ class RoutingProxy:
         except (json.JSONDecodeError, AttributeError, TypeError):
             pass
         return TokenUsage()
+
+    def drain(self) -> None:
+        """进入 draining 模式——停止接受新请求，等待现有请求完成。
+
+        调用后 forward() 将拒绝新请求并抛出 RuntimeError。
+        应在 shutdown 流程中最先调用。
+        """
+        self._draining = True
+        if self._active_requests == 0:
+            self._drain_event.set()
+
+    async def wait_drain(self, timeout: float = 30.0) -> bool:
+        """等待所有活跃请求完成。
+
+        Args:
+            timeout: 最大等待时间（秒）。超时后强制返回 False。
+
+        Returns:
+            True 表示所有请求已完成，False 表示超时（仍有未完成的请求）。
+        """
+        if self._active_requests == 0:
+            return True
+        try:
+            await asyncio.wait_for(self._drain_event.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
 
     async def close(self) -> None:
         """关闭内部的 httpx.AsyncClient。在应用 shutdown 时调用。"""

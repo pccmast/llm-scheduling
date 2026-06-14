@@ -128,12 +128,24 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ──
     logger.info("Shutting down...")
+
+    # 1. 停止健康检查
     health_checker.stop()
     health_task.cancel()
     try:
         await health_task
     except asyncio.CancelledError:
         pass
+
+    # 2. 进入 draining 模式，停止接受新请求
+    proxy.drain()
+    drained = await proxy.wait_drain(timeout=30.0)
+    if not drained:
+        logger.warning("Graceful shutdown timed out, forcing close")
+    else:
+        logger.info("All in-flight requests completed")
+
+    # 3. 关闭连接池
     await proxy.close()
     logger.info("LLM Dispatcher stopped")
 
@@ -145,6 +157,10 @@ def create_app() -> FastAPI:
     from src.dispatcher.api.admin import admin_router
     from src.dispatcher.api.health import health_router
     from src.dispatcher.api.inference import inference_router
+    from src.dispatcher.middleware import AdminAuthMiddleware
+
+    # Admin API 鉴权中间件（优先级最高）
+    app.add_middleware(AdminAuthMiddleware)
 
     app.include_router(health_router)
     app.include_router(inference_router)

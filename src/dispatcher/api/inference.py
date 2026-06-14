@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from src.shared.models import (
+    DrainInProgressError,
     InferenceRequest,
     NoAvailableInstanceError,
     QueueFullError,
@@ -67,6 +68,8 @@ async def chat_completions(request: Request):
         raise HTTPException(status_code=503, detail="No available instance for the requested model")
     except QueueFullError:
         raise HTTPException(status_code=503, detail="Request queue is full")
+    except DrainInProgressError:
+        raise HTTPException(status_code=503, detail="Server is shutting down, please retry")
 
 
 @inference_router.post("/v1/completions", response_model=None)
@@ -107,6 +110,8 @@ async def completions(request: Request):
         raise HTTPException(status_code=503, detail="No available instance for the requested model")
     except QueueFullError:
         raise HTTPException(status_code=503, detail="Request queue is full")
+    except DrainInProgressError:
+        raise HTTPException(status_code=503, detail="Server is shutting down, please retry")
 
 
 def _build_inference_request(body: dict) -> InferenceRequest:

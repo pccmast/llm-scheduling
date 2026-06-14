@@ -39,10 +39,19 @@ async def readiness_check(request: Request):
 
     Returns:
         {"ready": true/false}
-        ready=True 当且仅当注册表中至少有一个健康实例。
-        不 ready 时返回 HTTP 503。
+        不 ready 时返回 HTTP 503：
+        - 调度器正在 draining（优雅停机）
+        - 注册表中没有健康实例
     """
     from fastapi.responses import JSONResponse
+
+    # 优雅停机期间拒绝流量
+    proxy = getattr(request.app.state, "proxy", None)
+    if proxy is not None and getattr(proxy, "_draining", False):
+        return JSONResponse(
+            status_code=503,
+            content={"ready": False, "reason": "Server is draining"},
+        )
 
     registry = request.app.state.registry
     all_instances = registry.list_all()

@@ -1,0 +1,91 @@
+# PrometheusRule — LLM Inference Dispatcher 核心告警规则
+# 配合 prometheus-community/prometheus-stack 使用。
+#
+# 指标来源: dispatcher_request_latency_ms, dispatcher_queue_depth,
+#           dispatcher_requests_total, dispatcher_errors_total
+#
+groups:
+  - name: llm_dispatcher
+    interval: 30s
+    rules:
+      # ── 实例健康 ──────────────────────────────────────────
+      - alert: DispatcherNoHealthyInstances
+        expr: |
+          (
+            sum(dispatcher_requests_total{status="success"})
+            -
+            sum(dispatcher_requests_total{status="success"} offset 5m)
+          ) == 0
+          and
+          sum(dispatcher_requests_total{status="error"}) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "调度器无健康实例，所有请求均失败 > 2 分钟"
+          description: "最近 5 分钟无成功请求且持续报错，请检查所有推理引擎实例状态。"
+
+      # ── 队列堆积 ──────────────────────────────────────────
+      - alert: DispatcherQueueDepthHigh
+        expr: dispatcher_queue_depth > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "请求队列深度 > 50 持续 5 分钟"
+          description: "当前队列深度 {{ $value }}，所有 GPU 实例可能已达容量上限，建议触发扩容。"
+
+      - alert: DispatcherQueueDepthCritical
+        expr: dispatcher_queue_depth > 100
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "请求队列深度 > 100 持续 2 分钟，即将拒绝新请求"
+          description: "当前队列深度 {{ $value }}（max_size=100），新请求将被 503 拒绝。"
+
+      # ── 延迟劣化 ──────────────────────────────────────────
+      - alert: DispatcherP99LatencyHigh
+        expr: |
+          histogram_quantile(0.99, rate(dispatcher_request_latency_ms_bucket[5m])) > 10000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 推理延迟 > 10s 持续 5 分钟"
+          description: "P99 延迟 {{ $value }}ms，可能存在慢实例或 GPU 资源争抢。"
+
+      - alert: DispatcherP99LatencyCritical
+        expr: |
+          histogram_quantile(0.99, rate(dispatcher_request_latency_ms_bucket[5m])) > 30000
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "P99 推理延迟 > 30s，接近上游超时"
+          description: "P99 延迟 {{ $value }}ms，upstream_timeout=120s，大量请求可能超时。"
+
+      # ── 熔断器 ────────────────────────────────────────────
+      - alert: DispatcherCircuitBreakerOpen
+        expr: |
+          dispatcher_errors_total > 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "存在持续报错的实例（熔断器可能已 OPEN）"
+          description: "错误计数 {{ $value }}，请检查 /admin/status 查看熔断器状态。"
+
+      # ── 错误率 ────────────────────────────────────────────
+      - alert: DispatcherErrorRateHigh
+        expr: |
+          rate(dispatcher_requests_total{status="error"}[5m])
+          /
+          rate(dispatcher_requests_total[5m])
+          > 0.1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "调度器错误率 > 10% 持续 3 分钟"
+          description: "当前错误率 {{ $value | humanizePercentage }}，可能所有实例均已不可用。"

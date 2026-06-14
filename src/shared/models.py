@@ -176,6 +176,13 @@ class MissingAdapterError(Exception):
         self.engine_type = engine_type
 
 
+class DrainInProgressError(Exception):
+    """调度器正在 draining，拒绝新请求。"""
+
+    def __init__(self) -> None:
+        super().__init__("Proxy is draining, no new requests accepted")
+
+
 # ── 核心抽象基类（规格书 §2.2）─────────────────────────────
 
 
