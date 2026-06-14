@@ -104,9 +104,15 @@ async def main():
         )
 
         print(info("  → 启动 Mock 引擎 (port=8001)..."))
-        mock = subprocess.Popen([sys.executable, "scripts/mock_engine.py", f"--port={MOCK_PORT}"])
+        mock = subprocess.Popen(
+            [sys.executable, "scripts/mock_engine.py", f"--port={MOCK_PORT}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
         print(info("  → 启动 Mock 引擎 (port=8002)..."))
-        mock2 = subprocess.Popen([sys.executable, "scripts/mock_engine.py", f"--port={MOCK_PORT2}"])
+        mock2 = subprocess.Popen(
+            [sys.executable, "scripts/mock_engine.py", f"--port={MOCK_PORT2}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
 
         if not await wait_for_service(f"http://localhost:{MOCK_PORT}/health"):
             print(fail("  Mock 引擎 1 启动失败，退出。"))
@@ -122,6 +128,7 @@ async def main():
         disp = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "src.dispatcher.main:create_app",
              "--factory", f"--port={DISPATCHER_PORT}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         if not await wait_for_service(f"{DISPATCHER_URL}/health"):
             print(fail("  Dispatcher 启动失败，退出。"))
@@ -373,10 +380,10 @@ async def main():
                 "当前使用 weighted（加权路由），并发发送 10 个请求验证分布",
             )
 
-            # 阶段 7：禁掉 INFO 日志避免 20 条 httpx 日志刷屏
+            # 阶段 7：禁掉 uvicorn/httpx 日志避免并发请求时控制台刷屏
             import logging
-            logging.getLogger("httpx").setLevel(logging.WARNING)
-            logging.getLogger("httpcore").setLevel(logging.WARNING)
+            for name in ("uvicorn.access", "httpx", "httpcore"):
+                logging.getLogger(name).setLevel(logging.WARNING)
 
             print(f"  {info('→')} 并发发送 10 个请求，统计路由分布...")
             routes = {"mock-1": 0, "mock-2": 0}
