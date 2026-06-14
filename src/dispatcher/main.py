@@ -165,11 +165,6 @@ def create_app() -> FastAPI:
     from src.dispatcher.api.admin import admin_router
     from src.dispatcher.api.health import health_router
     from src.dispatcher.api.inference import inference_router
-    from src.dispatcher.middleware import AdminAuthMiddleware
-
-    # Admin API 鉴权中间件（优先级最高）
-    app.add_middleware(AdminAuthMiddleware)
-
     app.include_router(health_router)
     app.include_router(inference_router)
     app.include_router(admin_router)

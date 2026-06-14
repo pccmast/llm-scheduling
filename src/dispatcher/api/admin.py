@@ -11,11 +11,12 @@ POST /admin/circuit-breakers/{id}/reset — 熔断器重置
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.dispatcher.middleware import verify_admin_access
 from src.shared.models import ModelInstance
 
-admin_router = APIRouter(prefix="/admin")
+admin_router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin_access)])
 
 
 # ── 实例 CRUD ──────────────────────────────────────────────
