@@ -22,6 +22,7 @@ from src.shared.models import (
     InferenceResponse,
     LoadBalancer,
     MetricsRecorder,
+    MissingAdapterError,
     ModelInstance,
     NoAvailableInstanceError,
     TokenUsage,
@@ -208,6 +209,7 @@ class RoutingProxy:
         """
         start_time = time.monotonic()
         ttft_recorded = False
+        ttft_ms = 0.0
         instance: Optional[ModelInstance] = None
         usage = TokenUsage()
 
@@ -232,13 +234,18 @@ class RoutingProxy:
 
             # 5. 流式转发
             client = self._get_client()
+            last_chunk = ""
             async with client.stream("POST", url, json=body, headers=headers, timeout=self._timeout) as response:
                 async for line in response.aiter_lines():
                     if not ttft_recorded and line.startswith("data:") and "content" in line:
-                        _ttft_ms = (time.monotonic() - start_time) * 1000
+                        ttft_ms = (time.monotonic() - start_time) * 1000
                         ttft_recorded = True
 
+                    last_chunk = line
                     yield line + "\n"
+
+            # 从最后一个 SSE chunk 解析 usage（引擎在流末尾报告 token 数）
+            usage = self._parse_stream_usage(last_chunk)
 
             # 记录指标
             cb = self._get_cb(instance.instance_id)
@@ -249,7 +256,7 @@ class RoutingProxy:
                 self._metrics.record_request(
                     instance.instance_id,
                     (time.monotonic() - start_time) * 1000,
-                    0.0,
+                    ttft_ms,
                     usage,
                     success=True,
                 )
@@ -299,10 +306,14 @@ class RoutingProxy:
         return [inst for inst in candidates if (cb := self._get_cb(inst.instance_id)) is None or cb.allow_request()]
 
     def _get_adapter(self, instance: ModelInstance) -> EngineAdapter:
-        """获取实例对应的引擎适配器。"""
+        """获取实例对应的引擎适配器。
+
+        Raises:
+            MissingAdapterError: 没有注册对应 engine_type 的适配器。
+        """
         adapter = self._engine_adapters.get(instance.engine_type)
         if adapter is None:
-            raise NoAvailableInstanceError(instance.model)
+            raise MissingAdapterError(instance.engine_type)
         return adapter
 
     def _record_failure(
@@ -325,6 +336,41 @@ class RoutingProxy:
                     TokenUsage(),
                     success=False,
                 )
+
+    @staticmethod
+    def _parse_stream_usage(last_line: str) -> TokenUsage:
+        """从 SSE 流的最后一个 chunk 解析 token usage。
+
+        LLM 引擎通常在流结束时发送一个包含 usage 字段的 chunk，
+        格式为: data: {"usage": {"prompt_tokens": N, "completion_tokens": M, "total_tokens": T}}
+
+        Args:
+            last_line: SSE 流的最后一行（可能包含 usage）。
+
+        Returns:
+            解析出的 TokenUsage；如果解析失败返回空 TokenUsage。
+        """
+        if not last_line:
+            return TokenUsage()
+        try:
+            # 去除 SSE 前缀 "data: "
+            payload = last_line
+            if payload.startswith("data:"):
+                payload = payload[5:].lstrip()
+            # 跳过 "[DONE]" 标记
+            if payload.strip() == "[DONE]":
+                return TokenUsage()
+            data = json.loads(payload)
+            usage_raw = data.get("usage")
+            if usage_raw:
+                return TokenUsage(
+                    prompt_tokens=usage_raw.get("prompt_tokens", 0),
+                    completion_tokens=usage_raw.get("completion_tokens", 0),
+                    total_tokens=usage_raw.get("total_tokens", 0),
+                )
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            pass
+        return TokenUsage()
 
     async def close(self) -> None:
         """关闭内部的 httpx.AsyncClient。在应用 shutdown 时调用。"""

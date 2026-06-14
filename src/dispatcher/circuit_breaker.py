@@ -72,9 +72,10 @@ class InstanceCircuitBreaker(CircuitBreaker):
         if self._state == self._OPEN:
             elapsed = time.monotonic() - self._opened_at
             if elapsed >= self._config.recovery_timeout:
-                # Transition to HALF_OPEN (lazy)
+                # Transition to HALF_OPEN (lazy); the transition itself
+                # consumes one probe slot so half_open_max_calls is exact.
                 self._state = self._HALF_OPEN
-                self._half_open_requests = 0
+                self._half_open_requests = 1
                 self._success_count = 0
                 return True
             return False

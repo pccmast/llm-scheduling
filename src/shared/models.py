@@ -163,6 +163,14 @@ class CircuitOpenError(Exception):
         self.instance_id = instance_id
 
 
+class MissingAdapterError(Exception):
+    """未注册对应引擎类型的 EngineAdapter 时抛出（配置错误）。"""
+
+    def __init__(self, engine_type: str) -> None:
+        super().__init__(f"No EngineAdapter registered for engine_type: {engine_type}")
+        self.engine_type = engine_type
+
+
 # ── 核心抽象基类（规格书 §2.2）─────────────────────────────
 
 
