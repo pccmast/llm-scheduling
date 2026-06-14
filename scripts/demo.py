@@ -158,10 +158,11 @@ async def main():
             # ══════════════════════════════════════════════════════════════
             section_header(
                 "阶段 3/9 — 基础推理与优先级队列",
-                "发送 3 个不同优先级的请求，验证推理链路正常 + token 统计",
+                "发送 3 个基础请求 + 独立演示优先级队列的排序行为",
             )
 
-            print(f"  {info('→')} 发送 3 个请求（priority=1,5,10）...")
+            # 3a. 基础推理（验证链路正常）
+            print(f"  {title('3a. 基础推理')}: 发送 3 个不同优先级的请求...")
             for pri in [1, 5, 10]:
                 r = await client.post(
                     f"{DISPATCHER_URL}/v1/chat/completions",
@@ -182,8 +183,56 @@ async def main():
                 else:
                     check(f"priority={pri}", False)
 
-            print(f"\n  {info('说明')}: 当前推理端点走 proxy.forward() 直连路径，请求不经队列。")
-            print(f"  {info('说明')}: priority 字段在 RequestQueue.enqueue() 消费时生效（过载/批处理场景）。")
+            # 3b. 优先级队列排序验证（直接使用 RequestQueue，不经过 HTTP）
+            print(f"\n  {title('3b. 优先级队列排序')}: 直接使用 RequestQueue 验证排序...")
+            from src.dispatcher.queue import RequestQueue
+            from src.shared.models import InferenceRequest
+
+            q = RequestQueue(max_size=20)
+
+            # 故意打乱顺序入队：priority=5, 10, 1, 8, 3
+            test_order = [5, 10, 1, 8, 3]
+            for pri in test_order:
+                req = InferenceRequest(
+                    request_id=f"demo-{pri}",
+                    model="test-model",
+                    messages=[{"role": "user", "content": f"q-{pri}"}],
+                    priority=pri,
+                )
+                await q.enqueue(req)
+            print(f"    入队顺序 (优先级): {test_order}")
+
+            # 出队顺序应该按 priority 升序: 1, 3, 5, 8, 10
+            dequeued = []
+            for _ in range(5):
+                item = await q.dequeue()
+                if item:
+                    dequeued.append(item.request.priority)
+            print(f"    出队顺序 (优先级): {dequeued}")
+            check(
+                f"优先级排序正确 (期望 [1,3,5,8,10] → 实际 {dequeued})",
+                dequeued == [1, 3, 5, 8, 10],
+            )
+
+            # 3c. 同优先级 FIFO 验证
+            print(f"\n  {title('3c. 同优先级 FIFO')}: 同 priority=5 按入队顺序出队...")
+            for i in range(3):
+                req = InferenceRequest(
+                    request_id=f"fifo-{i}",
+                    model="test-model",
+                    messages=[{"role": "user", "content": f"fifo-{i}"}],
+                    priority=5,
+                )
+                await q.enqueue(req)
+            fifo_order = []
+            for _ in range(3):
+                item = await q.dequeue()
+                if item:
+                    fifo_order.append(item.request.request_id)
+            check(
+                f"同优先级 FIFO: {fifo_order}",
+                fifo_order == ["fifo-0", "fifo-1", "fifo-2"],
+            )
 
             # ══════════════════════════════════════════════════════════════
             # 阶段 4：流式推理 (SSE)
