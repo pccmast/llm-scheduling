@@ -373,6 +373,11 @@ async def main():
                 "当前使用 weighted（加权路由），并发发送 10 个请求验证分布",
             )
 
+            # 阶段 7：禁掉 INFO 日志避免 20 条 httpx 日志刷屏
+            import logging
+            logging.getLogger("httpx").setLevel(logging.WARNING)
+            logging.getLogger("httpcore").setLevel(logging.WARNING)
+
             print(f"  {info('→')} 并发发送 10 个请求，统计路由分布...")
             routes = {"mock-1": 0, "mock-2": 0}
 
@@ -424,6 +429,8 @@ async def main():
             print(f"\n  {title('8b. AutoScaler 决策引擎')}: 直接构造 AutoScaler 演示...")
             from src.dispatcher.balancer import create_balancer
             from src.dispatcher.registry import InstanceRegistry as DemoRegistry
+            from src.dispatcher.scaler import AutoScaler
+            from src.shared.models import InferenceRequest as FakeReq
             from src.shared.models import ModelInstance as DemoInstance
             from src.shared.models import ScaleConfig
 
@@ -438,9 +445,14 @@ async def main():
                 ))
 
             balancer = create_balancer("weighted")
-            # 模拟 gpu-1 有 5 个活跃请求（每个 ≈2000 weight），gpu-2 空闲
+            # 模拟 gpu-1 有 5 个活跃请求（每个 estimated_weight ≈ 2100 → 总负载 ≈ 10500）
+            fake_req = FakeReq(
+                request_id="fake", model="test-model",
+                messages=[{"role": "user", "content": "x" * 200}],
+                max_tokens=1024,
+            )
             for _ in range(5):
-                balancer.on_request_start("gpu-1")
+                balancer.on_request_start("gpu-1", fake_req)
 
             cfg = ScaleConfig(
                 scale_up_queue_threshold=10,
@@ -452,29 +464,29 @@ async def main():
                 cooldown_seconds=0,
             )
 
-            # 演示 3 种场景
-            print(f"    {info('场景 1 (扩容)')}: queue_depth=15 + gpu-1 负载 {balancer.get_load('gpu-1'):.0f}")
-            # 需要拿到 metrics 的 queue_depth……使用 mock
-            class _FakeMetrics:
+            class FakeMetrics:
+                def __init__(self, queue_depth: int):
+                    self._qd = queue_depth
                 def get_summary(self):
-                    return {"queue_depth": 15}
-                def record_queue_depth(self, _d): pass
+                    return {"queue_depth": self._qd}
+                def record_queue_depth(self, depth):
+                    pass
 
-            from src.dispatcher.scaler import AutoScaler
-            scaler = AutoScaler(r2, _FakeMetrics(), cfg, balancer=balancer)
+            # 演示 3 种场景
+            load1 = balancer.get_load("gpu-1")
+            print(f"    {info('场景 1 (扩容)')}: queue_depth=15 + gpu-1 负载 {load1:.0f} + cooldown=0")
+            scaler = AutoScaler(r2, FakeMetrics(15), cfg, balancer=balancer)
             d1 = scaler.evaluate()
             check(f"决策: {d1.action} ({d1.reason[:60]}...)", d1.action == "scale_up")
 
-            print(f"\n    {info('场景 2 (不扩容)')}: queue_depth=3 + 低负载")
-            _m2 = type("_M", (), {"get_summary": lambda s: {"queue_depth": 3}})()
-            scaler2 = AutoScaler(r2, _m2(), cfg, balancer=balancer)
+            print(f"\n    {info('场景 2 (不扩容)')}: queue_depth=3 (低于阈值 10)")
+            scaler2 = AutoScaler(r2, FakeMetrics(3), cfg, balancer=balancer)
             d2 = scaler2.evaluate()
             check(f"决策: {d2.action} ({d2.reason})", d2.action == "none")
 
             print(f"\n    {info('场景 3 (缩容)')}: queue_depth=0 + 无负载 + 空闲 > 300s")
-            _m3 = type("_M", (), {"get_summary": lambda s: {"queue_depth": 0}})()
-            scaler3 = AutoScaler(r2, _m3(), cfg, balancer=balancer)
-            scaler3._idle_since = time.monotonic() - 400  # 手动设置空闲时间
+            scaler3 = AutoScaler(r2, FakeMetrics(0), cfg, balancer=balancer)
+            scaler3._idle_since = time.monotonic() - 400
             d3 = scaler3.evaluate()
             check(f"决策: {d3.action} ({d3.reason[:60]}...)", d3.action == "scale_down")
 
