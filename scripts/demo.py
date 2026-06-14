@@ -445,13 +445,13 @@ async def main():
                 ))
 
             balancer = create_balancer("weighted")
-            # 模拟 gpu-1 有 5 个活跃请求（每个 estimated_weight ≈ 2100 → 总负载 ≈ 10500）
             fake_req = FakeReq(
                 request_id="fake", model="test-model",
                 messages=[{"role": "user", "content": "x" * 200}],
                 max_tokens=1024,
             )
-            for _ in range(5):
+            # gpu-1 有 10 个活跃请求 (weight≈2098×10=20980 → avg=10490>8000 ✅)
+            for _ in range(10):
                 balancer.on_request_start("gpu-1", fake_req)
 
             cfg = ScaleConfig(
@@ -474,18 +474,19 @@ async def main():
 
             # 演示 3 种场景
             load1 = balancer.get_load("gpu-1")
-            print(f"    {info('场景 1 (扩容)')}: queue_depth=15 + gpu-1 负载 {load1:.0f} + cooldown=0")
+            print(f"    {info('场景 1 (扩容)')}: queue_depth=15 + gpu-1={load1:.0f} gpu-2=0 → avg={load1/2:.0f}>8000")
             scaler = AutoScaler(r2, FakeMetrics(15), cfg, balancer=balancer)
             d1 = scaler.evaluate()
             check(f"决策: {d1.action} ({d1.reason[:60]}...)", d1.action == "scale_up")
 
-            print(f"\n    {info('场景 2 (不扩容)')}: queue_depth=3 (低于阈值 10)")
+            print(f"\n    {info('场景 2 (不扩容)')}: queue_depth=3 < 阈值 10 (负载够但队列不满)")
             scaler2 = AutoScaler(r2, FakeMetrics(3), cfg, balancer=balancer)
             d2 = scaler2.evaluate()
             check(f"决策: {d2.action} ({d2.reason})", d2.action == "none")
 
-            print(f"\n    {info('场景 3 (缩容)')}: queue_depth=0 + 无负载 + 空闲 > 300s")
-            scaler3 = AutoScaler(r2, FakeMetrics(0), cfg, balancer=balancer)
+            print(f"\n    {info('场景 3 (缩容)')}: queue_depth=0 + 新 balancer(负载=0) + 空闲 400s")
+            # 新 balancer 避免场景 1 的负载传染
+            scaler3 = AutoScaler(r2, FakeMetrics(0), cfg, balancer=create_balancer("weighted"))
             scaler3._idle_since = time.monotonic() - 400
             d3 = scaler3.evaluate()
             check(f"决策: {d3.action} ({d3.reason[:60]}...)", d3.action == "scale_down")
