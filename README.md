@@ -155,8 +155,16 @@ uv run ruff check src/ tests/        # Lint
 ## Docker
 
 ```bash
+# 启动完整环境（dispatcher + 2 个 mock 引擎，自动注册）
 docker compose up -d
-curl http://localhost:9090/health
+
+# 等待 init 容器完成注册（约 15s），然后测试推理
+curl -X POST http://localhost:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"test-model","messages":[{"role":"user","content":"Hello Docker!"}]}'
+
+# 查看状态
+curl http://localhost:9090/admin/status
 ```
 
 ## 技术栈

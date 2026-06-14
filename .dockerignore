@@ -41,9 +41,6 @@ tests/
 # Dashboard (Streamlit, not in dispatcher image)
 dashboard/
 
-# Mock scripts (only used via docker-compose, not in dispatcher image)
-scripts/
-
 # IDE temp
 .workbuddy/
 

@@ -1,3 +1,4 @@
+# 要求 Docker Compose >= v2.20（condition: service_healthy 支持）
 services:
   dispatcher:
     build: .
@@ -8,30 +9,68 @@ services:
     environment:
       - DISPATCHER_PORT=9090
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:9090/health')\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
 
   mock-engine-1:
-    image: python:3.11-slim
+    build: .
     ports:
       - "8001:8001"
-    volumes:
-      - ./scripts:/app/scripts:ro
-    working_dir: /app
     command: ["python", "scripts/mock_engine.py", "--port", "8001", "--engine", "ollama"]
-    depends_on:
-      - dispatcher
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
 
   mock-engine-2:
-    image: python:3.11-slim
+    build: .
     ports:
       - "8002:8002"
-    volumes:
-      - ./scripts:/app/scripts:ro
-    working_dir: /app
     command: ["python", "scripts/mock_engine.py", "--port", "8002", "--engine", "ollama"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # 自动注册 mock 引擎到 dispatcher
+  init:
+    build: .
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "Waiting for dispatcher..."
+        while ! python -c "import urllib.request; urllib.request.urlopen('http://dispatcher:9090/health')" 2>/dev/null; do
+          sleep 2
+        done
+        echo "Registering mock-engine-1..."
+        python -c "
+        import urllib.request, json
+        data = json.dumps({'instance_id':'mock-1','address':'http://mock-engine-1:8001','model':'test-model','engine_type':'ollama'})
+        urllib.request.urlopen(urllib.request.Request('http://dispatcher:9090/admin/instances', data=data.encode(), headers={'Content-Type':'application/json'}))
+        "
+        echo "Registering mock-engine-2..."
+        python -c "
+        import urllib.request, json
+        data = json.dumps({'instance_id':'mock-2','address':'http://mock-engine-2:8002','model':'test-model','engine_type':'ollama'})
+        urllib.request.urlopen(urllib.request.Request('http://dispatcher:9090/admin/instances', data=data.encode(), headers={'Content-Type':'application/json'}))
+        "
+        echo "Init complete — dispatcher ready with 2 mock engines."
     depends_on:
-      - dispatcher
+      dispatcher:
+        condition: service_healthy
+      mock-engine-1:
+        condition: service_healthy
+      mock-engine-2:
+        condition: service_healthy
+    restart: "no"
