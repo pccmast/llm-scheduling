@@ -25,3 +25,15 @@ Thumbs.db
 
 # Project specifications (source documents, not code)
 projects_md/
+
+# Benchmark experiment docs and results
+benchmark/**/*.md
+benchmark/**/*.log
+benchmark/results/
+benchmark/v2/results/
+
+# IDE temporary files
+.workbuddy/
+
+# Backup config files
+config/*.bak

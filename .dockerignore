@@ -1,0 +1,51 @@
+# Python / tooling
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.dockerignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Project docs & specs
+README.md
+projects_md/
+
+# Benchmark (not needed for production)
+benchmark/
+
+# Tests (not needed in image)
+tests/
+
+# Dashboard (Streamlit, not in dispatcher image)
+dashboard/
+
+# Mock scripts (only used via docker-compose, not in dispatcher image)
+scripts/
+
+# IDE temp
+.workbuddy/
+
+# Config backups
+config/*.bak
