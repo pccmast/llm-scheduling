@@ -19,13 +19,24 @@ class TGIAdapter(EngineAdapter):
     def build_request(self, instance: ModelInstance, request: InferenceRequest) -> tuple[str, dict, dict]:
         """构建 TGI /generate 请求。
 
-        将 messages 列表拼接为单个 prompt 字符串。
+        将 messages 列表拼接为带角色标记的 prompt 字符串，
+        格式: <|system|>...<|user|>...<|assistant|>...（ChatML 风格）。
         """
         url = instance.address.rstrip("/") + "/generate"
         headers = {"Content-Type": "application/json"}
 
-        # 拼接 messages 为 prompt
-        prompt = " ".join(m.get("content", "") for m in request.messages)
+        # 拼接 messages 为 prompt，保留角色信息
+        parts: list[str] = []
+        for m in request.messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if role == "system":
+                parts.append(f"<|system|>\n{content}")
+            elif role == "assistant":
+                parts.append(f"<|assistant|>\n{content}")
+            else:
+                parts.append(f"<|user|>\n{content}")
+        prompt = "\n".join(parts) + "\n<|assistant|>\n"
 
         body: dict = {
             "inputs": prompt,

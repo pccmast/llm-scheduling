@@ -6,18 +6,20 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from src.shared.models import InstanceStatus, ModelInstance
 
 
 class InstanceRegistry:
-    """推理引擎实例的注册表。"""
+    """推理引擎实例的注册表。
+
+    所有操作在 asyncio 单线程模型下不需要显式加锁；
+    实例状态变更（如 HealthChecker 的 mark_unhealthy）与读取操作（如 Proxy 的 list_by_model）
+    在协程协作调度下是安全的。
+    """
 
     def __init__(self) -> None:
         """初始化空的注册表。"""
         self._instances: dict[str, ModelInstance] = {}
-        self._lock = asyncio.Lock()
 
     def register(self, instance: ModelInstance) -> None:
         """注册一个新实例。

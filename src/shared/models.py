@@ -101,12 +101,17 @@ class ScaleDecision(BaseModel):
 
 
 class ScaleConfig(BaseModel):
-    """自动扩缩容的配置参数。"""
+    """自动扩缩容的配置参数。
+
+    load 阈值使用 balancer.get_load() 的原始分数。
+    以 WeightedBalancer 为例：典型请求 estimated_weight ≈ 2000，
+    满载实例负载 ≈ 10000-20000。
+    """
 
     scale_up_queue_threshold: int = 10
-    scale_up_load_threshold: float = 0.8
+    scale_up_load_threshold: float = 8000.0
     scale_down_idle_seconds: int = 300
-    scale_down_load_threshold: float = 0.1
+    scale_down_load_threshold: float = 500.0
     min_instances: int = 1
     max_instances: int = 10
     cooldown_seconds: int = 60
@@ -214,6 +219,14 @@ class LoadBalancer(ABC):
 
         默认空操作。子类可覆写以实现负载跟踪。
         """
+
+    def get_load(self, instance_id: str) -> float:
+        """返回指定实例的当前负载分数。默认返回 0.0。
+
+        子类（WeightedBalancer / LeastConnectionsBalancer）可覆写以暴露实际负载值，
+        供 AutoScaler 等组件使用。
+        """
+        return 0.0
 
 
 class EngineAdapter(ABC):

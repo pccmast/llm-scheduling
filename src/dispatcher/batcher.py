@@ -40,6 +40,7 @@ class DynamicBatcher:
         self._buffer: list[_PendingRequest] = []
         self._total_batches_sent: int = 0
         self._flush_lock = asyncio.Lock()
+        self._delayed_task: asyncio.Task[object] | None = None
 
     async def submit(self, request: InferenceRequest) -> InferenceResponse:
         """提交一个请求到批处理器。
@@ -61,11 +62,14 @@ class DynamicBatcher:
 
         # 达到最大批量，立即 flush
         if len(self._buffer) >= self._max_batch_size:
+            # 取消已有的延迟 flush 任务（如果存在）
+            if self._delayed_task and not self._delayed_task.done():
+                self._delayed_task.cancel()
             await self.flush()
         else:
-            # 否则等待超时后 flush
-            # 启动一个延迟 flush 任务
-            asyncio.create_task(self._delayed_flush())
+            # 否则启动一个延迟 flush 任务（仅在没有待执行的延迟任务时）
+            if self._delayed_task is None or self._delayed_task.done():
+                self._delayed_task = asyncio.create_task(self._delayed_flush())
 
         return await pending.future
 

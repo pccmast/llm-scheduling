@@ -9,22 +9,31 @@ from __future__ import annotations
 import time
 
 from src.dispatcher.registry import InstanceRegistry
-from src.shared.models import MetricsRecorder, ScaleConfig, ScaleDecision
+from src.shared.models import LoadBalancer, MetricsRecorder, ScaleConfig, ScaleDecision
 
 
 class AutoScaler:
     """自动扩缩容决策引擎。"""
 
-    def __init__(self, registry: InstanceRegistry, metrics: MetricsRecorder, config: ScaleConfig) -> None:
+    def __init__(
+        self,
+        registry: InstanceRegistry,
+        metrics: MetricsRecorder,
+        config: ScaleConfig,
+        balancer: LoadBalancer | None = None,
+    ) -> None:
         """
         Args:
             registry: 实例注册表（用于获取当前实例数）。
-            metrics: 指标记录器（用于获取负载和队列数据）。
+            metrics: 指标记录器（用于获取队列数据）。
             config: 扩缩容配置。
+            balancer: 负载均衡器（用于读取各实例的实际负载分数）。
+                      为 None 时负载检查退化为仅依赖队列深度。
         """
         self._registry = registry
         self._metrics = metrics
         self._config = config
+        self._balancer = balancer
         self._last_scale_time: float = 0.0
         self._idle_since: float | None = None
 
@@ -58,10 +67,16 @@ class AutoScaler:
         if current_count == 0:
             return ScaleDecision(action="none", reason="No instances registered")
 
-        # 计算平均负载：基于 per_instance 的请求数 / 实例数估算
-        per_instance = summary.get("per_instance", {})
-        total_active = sum(stats.get("request_count", 0) for stats in per_instance.values())
-        avg_load = total_active / max(current_count, 1) if total_active > 0 else 0.0
+        # 计算平均负载：从 balancer 读取各实例的实际负载分数
+        if self._balancer:
+            all_instances = self._registry.list_all()
+            loads = [self._balancer.get_load(inst.instance_id) for inst in all_instances]
+            total_load = sum(loads)
+            # 归一化为平均每实例负载
+            avg_load = total_load / current_count if current_count > 0 else 0.0
+        else:
+            # 无 balancer 引用时退化为队列深度代理
+            avg_load = float(queue_depth) / max(current_count, 1)
 
         # Cooldown 检查
         in_cooldown = (now - self._last_scale_time) < self._config.cooldown_seconds

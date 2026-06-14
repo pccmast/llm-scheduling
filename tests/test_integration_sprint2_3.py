@@ -397,7 +397,10 @@ class TestEngineAdapters:
         )
         url, headers, body = adapter.build_request(inst, req)
         assert url == "http://gpu:8080/generate"
-        assert "Hello Hi" in body["inputs"]
+        assert "<|user|>" in body["inputs"]
+        assert "Hello" in body["inputs"]
+        assert "<|assistant|>" in body["inputs"]
+        assert "Hi" in body["inputs"]
 
     def test_tgi_adapter_parse_response(self) -> None:
         adapter = TGIAdapter()

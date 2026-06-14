@@ -25,9 +25,9 @@ circuit_breaker:
 auto_scaler:
   enabled: false
   scale_up_queue_threshold: 10
-  scale_up_load_threshold: 0.8
+  scale_up_load_threshold: 8000.0
   scale_down_idle_seconds: 300
-  scale_down_load_threshold: 0.1
+  scale_down_load_threshold: 500.0
   min_instances: 1
   max_instances: 10
   cooldown_seconds: 60

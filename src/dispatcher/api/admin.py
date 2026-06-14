@@ -125,9 +125,6 @@ async def reset_circuit_breaker(instance_id: str, request: Request) -> dict:
     cb_registry = request.app.state.circuit_breakers
     if cb_registry is None:
         raise HTTPException(status_code=404, detail="Circuit breaker registry not configured")
-    try:
-        cb = cb_registry.get_or_create(instance_id)
-        cb.reset()
-        return {"status": "ok", "instance_id": instance_id, "new_state": cb.state}
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Instance '{instance_id}' not found")
+    cb = cb_registry.get_or_create(instance_id)
+    cb.reset()
+    return {"status": "ok", "instance_id": instance_id, "new_state": cb.state}

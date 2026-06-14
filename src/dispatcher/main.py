@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
     auto_scaler = None
     if scaler_config.get("enabled", False):
         scale_cfg = ScaleConfig(**scaler_config)
-        auto_scaler = AutoScaler(registry=registry, metrics=metrics, config=scale_cfg)
+        auto_scaler = AutoScaler(registry=registry, metrics=metrics, config=scale_cfg, balancer=balancer)
 
     # 10. Health Checker
     hc_config_data = yaml_config.get("health_check", {})

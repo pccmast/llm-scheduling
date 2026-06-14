@@ -119,9 +119,9 @@ class TestScaleConfig:
         assert cfg.max_instances == 10
         assert cfg.cooldown_seconds == 60
         assert cfg.scale_up_queue_threshold == 10
-        assert cfg.scale_up_load_threshold == 0.8
+        assert cfg.scale_up_load_threshold == 8000.0
         assert cfg.scale_down_idle_seconds == 300
-        assert cfg.scale_down_load_threshold == 0.1
+        assert cfg.scale_down_load_threshold == 500.0
 
     def test_custom_values(self) -> None:
         """可以设置自定义值。"""
