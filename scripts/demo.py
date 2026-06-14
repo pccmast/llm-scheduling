@@ -158,7 +158,7 @@ async def main():
             # ══════════════════════════════════════════════════════════════
             section_header(
                 "阶段 3/9 — 基础推理与优先级队列",
-                "发送 3 个不同优先级的请求，验证优先级隔离和负载分发",
+                "发送 3 个不同优先级的请求，验证推理链路正常 + token 统计",
             )
 
             print(f"  {info('→')} 发送 3 个请求（priority=1,5,10）...")
@@ -182,10 +182,8 @@ async def main():
                 else:
                     check(f"priority={pri}", False)
 
-            # 查看队列深度
-            r = await client.get(f"{DISPATCHER_URL}/admin/status")
-            qd = r.json().get("queue_depth", 0)
-            check(f"当前队列深度: {qd}", True)
+            print(f"\n  {info('说明')}: 当前推理端点走 proxy.forward() 直连路径，请求不经队列。")
+            print(f"  {info('说明')}: priority 字段在 RequestQueue.enqueue() 消费时生效（过载/批处理场景）。")
 
             # ══════════════════════════════════════════════════════════════
             # 阶段 4：流式推理 (SSE)
