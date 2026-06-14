@@ -12,8 +12,14 @@ import asyncio
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import httpx
+
+# 确保项目根目录在 sys.path 中（支持直接 python scripts/demo.py）
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 # ── 常量 ──────────────────────────────────────────────────────
 MOCK_PORT = 8001
