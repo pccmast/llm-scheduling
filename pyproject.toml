@@ -1,7 +1,7 @@
 [project]
 name = "llm-dispatcher"
 version = "0.1.0"
-description = "LLM 推理调度平台 — 部署在多个 LLM 推理引擎实例之上的智能调度层"
+description = "LLM    LLM "
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",
@@ -48,3 +48,8 @@ packages = ["src/shared", "src/dispatcher"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "locust>=2.44.1",
+]
