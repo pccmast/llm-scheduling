@@ -317,12 +317,13 @@ async def main():
             # ══════════════════════════════════════════════════════════════
             section_header(
                 "阶段 7/9 — 负载均衡策略",
-                "当前使用 weighted（加权路由），验证请求分布在两个健康实例间",
+                "当前使用 weighted（加权路由），并发发送 10 个请求验证分布",
             )
 
-            print(f"  {info('→')} 发送 10 个请求，统计路由分布...")
+            print(f"  {info('→')} 并发发送 10 个请求，统计路由分布...")
             routes = {"mock-1": 0, "mock-2": 0}
-            for i in range(10):
+
+            async def send_one(i: int) -> None:
                 r = await client.post(
                     f"{DISPATCHER_URL}/v1/chat/completions",
                     json={
@@ -337,8 +338,15 @@ async def main():
                         routes["mock-1"] += 1
                     else:
                         routes["mock-2"] += 1
+
+            # 并发发送：请求同时到达，Balancer 感知到负载后自动分发
+            await asyncio.gather(*(send_one(i) for i in range(10)))
+
             print(f"    路由分布: mock-1={ok(str(routes['mock-1']))}  mock-2={ok(str(routes['mock-2']))}")
-            check("两个实例均有流量", routes["mock-1"] > 0 and routes["mock-2"] > 0)
+            both_used = routes["mock-1"] > 0 and routes["mock-2"] > 0
+            check("两个实例均有流量 (并发 → 负载感知分发)", both_used)
+            if not both_used:
+                print(f"    {info('提示')}: 串行请求下两个实例等负载时选第一个；并发才能展示加权分发")
 
             # ══════════════════════════════════════════════════════════════
             # 阶段 8：指标与扩缩容评估
