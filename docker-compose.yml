@@ -2,6 +2,7 @@
 services:
   dispatcher:
     build: .
+    image: llm-dispatcher:local
     ports:
       - "9090:9090"
     volumes:
@@ -17,7 +18,7 @@ services:
     restart: unless-stopped
 
   mock-engine-1:
-    build: .
+    image: llm-dispatcher:local   # 复用 dispatcher 构建的镜像
     ports:
       - "8001:8001"
     command: ["python", "scripts/mock_engine.py", "--port", "8001", "--engine", "ollama"]
@@ -30,7 +31,7 @@ services:
     restart: unless-stopped
 
   mock-engine-2:
-    build: .
+    image: llm-dispatcher:local   # 复用 dispatcher 构建的镜像
     ports:
       - "8002:8002"
     command: ["python", "scripts/mock_engine.py", "--port", "8002", "--engine", "ollama"]
@@ -44,7 +45,7 @@ services:
 
   # 自动注册 mock 引擎到 dispatcher
   init:
-    build: .
+    image: llm-dispatcher:local   # 复用 dispatcher 构建的镜像
     command:
       - /bin/sh
       - -c
