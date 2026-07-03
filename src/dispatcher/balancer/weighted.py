@@ -45,6 +45,16 @@ class WeightedBalancer(LoadBalancer):
             active = [i for i in candidates
                       if self._cooldown_until.get(i.instance_id, 0) <= now]
             if active:
+                # v4.4: 出冷的实例 → 速度重置为平均值, 避免"富者愈富"
+                for inst in active:
+                    iid = inst.instance_id
+                    if self._speed_ewma.get(iid, 0.3) <= 0.5 and len(candidates) > 1:
+                        other_speeds = [self._speed_ewma.get(i.instance_id, 0.3)
+                                        for i in candidates if i.instance_id != iid]
+                        avg_other = sum(other_speeds) / len(other_speeds) if other_speeds else 0.3
+                        # 重置为比较保守的估计
+                        if avg_other > 0.5:
+                            self._speed_ewma[iid] = avg_other * 0.7
                 candidates = active
         # 全部冷却 → 不退避, 全部候选
 
