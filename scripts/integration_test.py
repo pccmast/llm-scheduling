@@ -2,7 +2,7 @@
 import json, sys, time, urllib.request, urllib.error
 
 BASE = "http://localhost:9090"
-LM_STUDIO = "http://127.0.0.1:12345"
+LM_STUDIO = "http://127.0.0.1:14344"
 MODEL = "qwen/qwen3-1.7b"
 
 passed = 0

@@ -7,7 +7,7 @@
     uv run python benchmark/v2/scripts/run_v2_benchmark.py --skip-a --skip-e
 
 需要前置依赖:
-    - 真实 GPU: LM Studio on port 12345 (实验 A, B, E, F, G)
+    - 真实 GPU: LM Studio on port 14344 (实验 A, B, E, F, G)
     - 调度器: 需要手动启动 (实验 D, G)
 """
 

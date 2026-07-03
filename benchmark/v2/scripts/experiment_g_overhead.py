@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 
 # 真实 GPU
-GPU_URL = "http://localhost:12345/v1/chat/completions"
+GPU_URL = "http://localhost:14344/v1/chat/completions"
 GPU_KEY = "sk-lm-cR1GVaJg:W0pVeY0MwNSkiaJY3llG"
 MODEL = "minicpm-v-4.6"
 

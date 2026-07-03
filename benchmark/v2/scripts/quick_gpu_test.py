@@ -2,7 +2,7 @@
 import time, json, statistics
 import httpx
 
-URL = "http://localhost:12345/v1/chat/completions"
+URL = "http://localhost:14344/v1/chat/completions"
 KEY = "sk-lm-cR1GVaJg:W0pVeY0MwNSkiaJY3llG"
 MODEL = "minicpm-v-4.6"
 

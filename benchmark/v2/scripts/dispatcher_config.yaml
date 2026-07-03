@@ -5,7 +5,7 @@ dispatcher:
 
 instances:
   - instance_id: "gpu-local"
-    address: "http://localhost:12345"
+    address: "http://localhost:14344"
     model: "minicpm-v-4.6"
     engine_type: "ollama"
     max_concurrent: 5

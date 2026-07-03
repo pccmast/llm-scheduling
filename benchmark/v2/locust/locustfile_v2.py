@@ -2,7 +2,7 @@
 
 用法:
     # 直连真实 GPU
-    uv run locust -f benchmark/v2/locust/locustfile_v2.py --host=http://localhost:12345
+    uv run locust -f benchmark/v2/locust/locustfile_v2.py --host=http://localhost:14344
 
     # 通过 Dispatcher (先注册实例)
     uv run locust -f benchmark/v2/locust/locustfile_v2.py --host=http://localhost:9090

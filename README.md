@@ -41,7 +41,7 @@ uv run uvicorn src.dispatcher.main:create_app --factory --port 9090
 # 3. 注册 LM Studio 实例 (通配符, 可处理任意模型)
 curl -X POST http://localhost:9090/admin/instances \
   -H "Content-Type: application/json" \
-  -d '{"instance_id":"qwen-A","address":"http://127.0.0.1:12345",
+  -d '{"instance_id":"qwen-A","address":"http://127.0.0.1:14344",
        "model":"*","engine_type":"vllm","capacity_factor":1.5}'
 
 # 4. 发送推理请求
