@@ -48,13 +48,25 @@ class VLLMAdapter(EngineAdapter):
         return url, headers, body
 
     def parse_response(self, raw: dict) -> InferenceResponse:
-        """解析 OpenAI 兼容响应格式。"""
+        """解析 OpenAI 兼容响应格式。
+
+        兼容 thinking 模型 (DeepSeek-R1, MiniCPM, Qwen3 等):
+        - content 非空 → 直接返回
+        - content 空 + reasoning_content 非空 → 返回 reasoning 内容
+        - 两者都有 → 合并 (reasoning 在前, content 在后)
+        """
         try:
             choices = raw.get("choices", [])
             content = ""
             if choices:
                 message = choices[0].get("message", {})
-                content = message.get("content", "")
+                content = message.get("content", "") or ""
+                reasoning = message.get("reasoning_content", "") or ""
+                # thinking 模型：content 为空时用 reasoning_content
+                if not content.strip() and reasoning:
+                    content = reasoning
+                elif reasoning:
+                    content = f"[reasoning]\n{reasoning}\n\n[answer]\n{content}"
 
             usage_data = raw.get("usage", {})
             usage = TokenUsage(
