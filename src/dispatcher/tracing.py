@@ -17,7 +17,7 @@ from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExporter
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 
@@ -37,6 +37,7 @@ def init_tracing(service_name: str = "llm-dispatcher") -> trace.Tracer:
 
     # 根据环境变量选择 exporter
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    exporter: SpanExporter
     if otlp_endpoint:
         exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
     else:

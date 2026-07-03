@@ -67,6 +67,35 @@ services:
         urllib.request.urlopen(urllib.request.Request('http://dispatcher:9090/admin/instances', data=data.encode(), headers={'Content-Type':'application/json'}))
         "
         echo "Init complete — dispatcher ready with 2 mock engines."
+        echo ""
+        echo "=== Smoke Test ==="
+        echo "→ Sending inference request..."
+        python -c "
+        import json, urllib.request, sys
+        data = json.dumps({'model':'test-model','messages':[{'role':'user','content':'smoke test'}]})
+        req = urllib.request.Request('http://dispatcher:9090/v1/chat/completions', data=data.encode(), headers={'Content-Type':'application/json'})
+        try:
+            resp = urllib.request.urlopen(req, timeout=30)
+            body = json.loads(resp.read())
+            content = body['choices'][0]['message']['content']
+            assert '8001' in content or '8002' in content, f'unexpected response: {content[:100]}'
+            print(f'  \033[32mPASS\033[0m inference OK — routed to mock engine')
+        except Exception as e:
+            print(f'  \033[31mFAIL\033[0m {e}', file=sys.stderr)
+            sys.exit(1)
+        "
+        echo ""
+        echo "→ Checking admin status..."
+        python -c "
+        import json, urllib.request, sys
+        resp = urllib.request.urlopen('http://dispatcher:9090/admin/status')
+        body = json.loads(resp.read())
+        assert body['instances']['total'] == 2, f'expected 2 instances, got {body[\"instances\"][\"total\"]}'
+        assert body['instances']['healthy'] == 2, f'expected 2 healthy, got {body[\"instances\"][\"healthy\"]}'
+        print(f'  \033[32mPASS\033[0m status OK — {body[\"instances\"][\"healthy\"]}/{body[\"instances\"][\"total\"]} healthy')
+        "
+        echo ""
+        echo "=== Smoke Test Passed ==="
     depends_on:
       dispatcher:
         condition: service_healthy
