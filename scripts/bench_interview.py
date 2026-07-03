@@ -16,8 +16,18 @@ PASS = 0
 FAIL = 0
 
 
-def ok(m): global PASS; PASS += 1; print(f"  \033[32mPASS\033[0m {m}")
-def fail(m, d=""): global FAIL; FAIL += 1; print(f"  \033[31mFAIL\033[0m {m}"); d and print(f"         {d}")
+def ok(m):
+    global PASS
+    PASS += 1
+    print(f"  \033[32mPASS\033[0m {m}")
+
+
+def fail(m, d=""):
+    global FAIL
+    FAIL += 1
+    print(f"  \033[31mFAIL\033[0m {m}")
+    if d:
+        print(f"         {d}")
 
 
 def infer(model="qwen/qwen3-1.7b", tokens=10, timeout=120):

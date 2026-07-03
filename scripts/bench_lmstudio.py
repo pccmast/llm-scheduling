@@ -1,4 +1,5 @@
 """面试向压测 — LM Studio 真实大模型版"""
+import concurrent.futures
 import json
 import statistics
 import time
@@ -12,11 +13,17 @@ PASS = 0
 FAIL = 0
 
 def ok(m):
-    global PASS; PASS += 1; print(f"  \033[32mPASS\033[0m {m}")
+    global PASS
+    PASS += 1
+    print(f"  \033[32mPASS\033[0m {m}")
+
 
 def _fail(m, d=""):
-    global FAIL; FAIL += 1; print(f"  \033[31mFAIL\033[0m {m}")
-    if d: print(f"         {d}")
+    global FAIL
+    FAIL += 1
+    print(f"  \033[31mFAIL\033[0m {m}")
+    if d:
+        print(f"         {d}")
 
 def infer_dispatch(tokens=10, timeout=120):
     body = json.dumps({"model": MODEL, "messages": [{"role": "user", "content": "Hello"}], "max_tokens": tokens}).encode()
@@ -103,7 +110,6 @@ print(f"\n{'='*60}")
 print("场景 3: 并发吞吐量 — 调度器 vs 直连")
 print("=" * 60)
 
-import concurrent.futures
 
 
 def do_direct():

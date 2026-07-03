@@ -42,6 +42,15 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
 
+[tool.ruff.lint.per-file-ignores]
+# 压测工具脚本: 工具性质, 放宽 strict 规则
+"scripts/bench_interview.py" = ["E722"]
+"scripts/bench_lmstudio.py" = ["E402", "E501"]
+"scripts/bench_weighted.py" = ["E402", "E501"]
+# 集成测试脚本
+"scripts/integration_test.py" = ["E501"]
+"scripts/integration_scheduling_test.py" = ["E722", "E501", "E701", "E702", "N806"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = false

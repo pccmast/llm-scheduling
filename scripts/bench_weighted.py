@@ -5,6 +5,7 @@
 用法: uv run python scripts/bench_weighted.py
 """
 
+import concurrent.futures
 import json
 import statistics
 import sys
@@ -42,8 +43,10 @@ print(f"实例: [{m1}], [{m2}]")
 # ── 2. 预热 + 竞速: 各跑 10 轮测速度 ──
 print("\n=== 竞速预热 ===")
 for m in [m1, m2]:
-    try: dispatch(m, tokens=5)
-    except: pass
+    try:
+        dispatch(m, tokens=5)
+    except Exception:
+        pass
 
 print("\n=== 两副本 10 轮速度对比 ===")
 speeds = {m1: [], m2: []}
@@ -67,7 +70,6 @@ for iid, info in debug.get("instances", {}).items():
 
 # ── 4. 速度感知: 并发 20 请求, 观察流量分配 ──
 print("\n=== 速度感知路由: 20 并发请求, 观察分配 ===")
-from concurrent.futures import ThreadPoolExecutor
 
 route_count = {m1: 0, m2: 0}
 def send_one(idx):
@@ -75,10 +77,11 @@ def send_one(idx):
     try:
         _, _, _ = dispatch(m, tokens=20)
         route_count[m] += 1
-    except: pass
+    except Exception:
+        pass
 
 t0 = time.time()
-with ThreadPoolExecutor(max_workers=4) as ex:
+with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
     list(ex.map(send_one, range(20)))
 elapsed = time.time() - t0
 

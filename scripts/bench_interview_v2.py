@@ -260,9 +260,7 @@ async def main():
         # 对比: 高延迟模拟 (模拟真实 GPU 推理耗时)
         # 使用不同的 mock 延迟端口来测试调度器在真实场景下的价值
         info("模拟真实 GPU 推理 (200ms 延迟 mock)...")
-        # 临时修改: 使用 mock2 的高延迟替代测试
         # 对于真实 GPU (200ms+), 调度器 overhead 占比极小
-        simulated_gpu_latency = 0.200  # 200ms 模拟 GPU 推理
         if d_med > 50:
             info(f"当前 mock 延迟约 {d_med:.0f}ms")
         overhead_pct = overhead_med / d_med * 100 if d_med > 0 else 0

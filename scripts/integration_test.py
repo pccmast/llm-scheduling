@@ -126,7 +126,6 @@ def t5():
     t0 = time.time()
     resp = urllib.request.urlopen(req, timeout=300)
     chunk_count = 0
-    content_parts = []
     for line_bytes in resp:
         line = line_bytes.decode("utf-8", errors="replace").strip()
         if line.startswith("data: ") and "content" in line:
