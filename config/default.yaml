@@ -5,6 +5,12 @@ dispatcher:
 
 instances: []
 
+routing:                  # v4: 路由重试与 fallback
+  max_retries: 2           # 最多重试 2 次 (总尝试 3 个实例)
+  retry_on_timeout: true
+  retry_on_5xx: true
+  retry_on_connection: true
+
 load_balancer:
   strategy: "weighted"   # "round_robin" | "least_conn" | "weighted"
   weights:               # v4: weighted 策略的评分权重

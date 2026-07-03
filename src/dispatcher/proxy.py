@@ -34,7 +34,7 @@ from src.shared.models import (
 
 
 class RoutingProxy:
-    """请求路由与转发引擎。"""
+    """请求路由与转发引擎。v4: 支持重试 + fallback。"""
 
     def __init__(
         self,
@@ -44,6 +44,7 @@ class RoutingProxy:
         circuit_breakers: dict[str, CircuitBreaker] | CircuitBreakerRegistry | None = None,
         metrics: MetricsRecorder | None = None,
         timeout: float = 120.0,
+        routing_config: "RoutingConfig | None" = None,  # type: ignore[name-defined]
     ) -> None:
         """
         Args:
@@ -51,9 +52,12 @@ class RoutingProxy:
             balancer: 负载均衡策略。
             engine_adapters: 引擎类型 → 适配器的映射。
             circuit_breakers: 实例 ID → 熔断器的映射或 CircuitBreakerRegistry。
-            metrics: 指标记录器。Sprint 1 可为 None。
+            metrics: 指标记录器。
             timeout: 上游转发超时（秒）。
+            routing_config: v4 路由重试配置。None 使用默认 (2 次重试).
         """
+        from src.shared.models import RoutingConfig
+
         self._registry = registry
         self._balancer = balancer
         self._engine_adapters = engine_adapters
@@ -63,6 +67,7 @@ class RoutingProxy:
         )  # type: ignore[assignment]
         self._metrics = metrics
         self._timeout = timeout
+        self._routing_config = routing_config or RoutingConfig()
         self._client: httpx.AsyncClient | None = None
         # Graceful shutdown state
         self._active_requests: int = 0
@@ -105,7 +110,6 @@ class RoutingProxy:
             raise DrainInProgressError()
 
         start_time = time.monotonic()
-        instance: Optional[ModelInstance] = None
         self._active_requests += 1
 
         tracer = trace.get_tracer(__name__)
@@ -120,142 +124,139 @@ class RoutingProxy:
             },
         )
 
-        try:
-            with tracer.start_as_current_span("balancer_select") as select_span:
-                # 1. 获取候选实例
-                candidates = self._registry.list_by_model(request.model)
-                select_span.set_attribute("candidates_count", len(candidates))
-                if not candidates:
-                    raise NoAvailableInstanceError(request.model)
+        # v4: 重试循环 — 瞬态错误时换实例重试
+        candidates = self._registry.list_by_model(request.model)
+        available = self._filter_by_circuit_breaker(candidates)
+        tried: set[str] = set()
+        last_response: InferenceResponse | None = None
+        max_attempts = self._routing_config.max_retries + 1
 
-                # 2. 过滤熔断器 OPEN 的实例
-                available = self._filter_by_circuit_breaker(candidates)
-                select_span.set_attribute("available_count", len(available))
-                if not available:
-                    raise NoAvailableInstanceError(request.model)
+        for attempt in range(max_attempts):
+            if not available:
+                break
+            if attempt > 0:
+                root_span.set_attribute(f"retry_{attempt}", True)
 
-                # 3. 选择实例
-                instance = self._balancer.select(available, request)
-                select_span.set_attribute("selected_instance", instance.instance_id)
-
-            # 4. 记录请求开始
+            instance = self._balancer.select(available, request)
+            tried.add(instance.instance_id)
             self._balancer.on_request_start(instance.instance_id, request)
 
-            # 5. 获取适配器并构建请求
-            adapter = self._get_adapter(instance)
-            url, headers, body = adapter.build_request(instance, request)
-
-            # 6. 转发
-            with tracer.start_as_current_span("engine_inference") as infer_span:
-                infer_span.set_attribute("instance_id", instance.instance_id)
-                infer_span.set_attribute("engine_type", instance.engine_type)
-                client = self._get_client()
-                response = await client.post(url, json=body, headers=headers, timeout=self._timeout)
-                infer_span.set_attribute("http_status_code", response.status_code)
-
-            # 6a. 检查 HTTP 状态码
-            if response.status_code >= 500:
-                root_span.set_status(Status(StatusCode.ERROR, f"Upstream returned {response.status_code}"))
-                root_span.set_attribute("error", True)
-                error_resp = InferenceResponse(
-                    request_id=request.request_id,
-                    instance_id=instance.instance_id,
-                    status="error",
-                    error_message=f"Upstream returned {response.status_code}",
-                    latency_ms=(time.monotonic() - start_time) * 1000,
-                )
-                self._record_failure(instance, error_resp, request, start_time)
-                return error_resp
-
-            raw = response.json()
-
-            # 7. 解析响应
-            with tracer.start_as_current_span("parse_response"):
-                inference_response = adapter.parse_response(raw)
-                inference_response.request_id = request.request_id
-                inference_response.instance_id = instance.instance_id
-                inference_response.latency_ms = (time.monotonic() - start_time) * 1000
-
-            # 8. 更新熔断器
-            cb = self._get_cb(instance.instance_id)
-            if cb:
-                cb.record_success()
-
-            # 9. 记录指标
-            if self._metrics:
-                usage = inference_response.usage or TokenUsage()
-                self._metrics.record_request(
-                    instance.instance_id,
-                    inference_response.latency_ms,
-                    0.0,
-                    usage,
-                    success=True,
-                )
-
-            # v4: 性能反馈 — 回写实际 tok/s 到 balancer
-            if hasattr(self._balancer, "record_performance") and usage:
-                self._balancer.record_performance(
-                    instance.instance_id,
-                    usage.completion_tokens,
-                    inference_response.latency_ms,
-                )
-            # v4: 可靠性反馈
-            if hasattr(self._balancer, "record_success"):
-                self._balancer.record_success(instance.instance_id)
-
-            root_span.set_attribute("success", True)
-            return inference_response
-
-        except NoAvailableInstanceError:
-            root_span.set_status(Status(StatusCode.ERROR, "No available instance"))
-            root_span.set_attribute("error", True)
-            raise
-        except httpx.TimeoutException:
-            root_span.set_status(Status(StatusCode.ERROR, "Upstream timeout"))
-            root_span.set_attribute("error", True)
-            error_resp = InferenceResponse(
-                request_id=request.request_id,
-                instance_id=instance.instance_id if instance else "",
-                status="timeout",
-                error_message="Upstream timeout",
-                latency_ms=(time.monotonic() - start_time) * 1000,
-            )
-            self._record_failure(instance, error_resp, request, start_time)
-            return error_resp
-        except httpx.ConnectError:
-            root_span.set_status(Status(StatusCode.ERROR, "Connection refused"))
-            root_span.set_attribute("error", True)
-            error_resp = InferenceResponse(
-                request_id=request.request_id,
-                instance_id=instance.instance_id if instance else "",
-                status="error",
-                error_message="Connection refused",
-                latency_ms=(time.monotonic() - start_time) * 1000,
-            )
-            self._record_failure(instance, error_resp, request, start_time)
-            return error_resp
-        except Exception as exc:
-            root_span.set_status(Status(StatusCode.ERROR, str(exc)))
-            root_span.set_attribute("error", True)
-            root_span.record_exception(exc)
-            error_resp = InferenceResponse(
-                request_id=request.request_id,
-                instance_id=instance.instance_id if instance else "",
-                status="error",
-                error_message=str(exc),
-                latency_ms=(time.monotonic() - start_time) * 1000,
-            )
-            self._record_failure(instance, error_resp, request, start_time)
-            return error_resp
-        finally:
-            latency_ms = (time.monotonic() - start_time) * 1000
-            root_span.set_attribute("total_latency_ms", latency_ms)
-            root_span.end()
-            if instance:
+            try:
+                response = await self._try_one_attempt(instance, request, start_time, tracer)
+            except httpx.TimeoutException:
                 self._balancer.on_request_end(instance.instance_id, request)
+                last_response = self._make_error_resp(request, instance, "timeout", "Upstream timeout", start_time)
+                self._record_failure(instance, last_response, request, start_time)
+                if not self._routing_config.retry_on_timeout:
+                    break
+                available = [i for i in available if i.instance_id not in tried]
+                continue
+            except httpx.ConnectError:
+                self._balancer.on_request_end(instance.instance_id, request)
+                last_response = self._make_error_resp(request, instance, "error", "Connection refused", start_time)
+                self._record_failure(instance, last_response, request, start_time)
+                if not self._routing_config.retry_on_connection:
+                    break
+                available = [i for i in available if i.instance_id not in tried]
+                available = [i for i in available if i.instance_id not in tried]
+                continue
+            except Exception as exc:
+                self._balancer.on_request_end(instance.instance_id, request)
+                last_response = self._make_error_resp(request, instance, "error", str(exc), start_time)
+                self._record_failure(instance, last_response, request, start_time)
+                break
+            else:
+                self._balancer.on_request_end(instance.instance_id, request)
+                # 成功
+                if response.status == "ok":
+                    root_span.set_attribute("success", True)
+                    root_span.set_attribute("total_latency_ms", response.latency_ms)
+                    root_span.end()
+                    self._active_requests -= 1
+                    if self._draining and self._active_requests == 0:
+                        self._drain_event.set()
+                    return response
+
+                # 5xx → 可重试
+                if response.status == "error" and self._routing_config.retry_on_5xx:
+                    self._record_failure(instance, response, request, start_time)
+                    available = [i for i in available if i.instance_id not in tried]
+                    last_response = response
+                    if available:
+                        continue
+
+                root_span.set_attribute("total_latency_ms", response.latency_ms)
+                root_span.end()
+                self._active_requests -= 1
+                if self._draining and self._active_requests == 0:
+                    self._drain_event.set()
+                return response
+
+        # 所有尝试失败
+        if last_response:
+            root_span.set_status(Status(StatusCode.ERROR, "All instances failed"))
+            root_span.set_attribute("error", True)
+            root_span.set_attribute("retries", len(tried))
+            root_span.set_attribute("total_latency_ms", (time.monotonic() - start_time) * 1000)
+            root_span.end()
             self._active_requests -= 1
             if self._draining and self._active_requests == 0:
                 self._drain_event.set()
+            return last_response
+
+        raise NoAvailableInstanceError(request.model)
+
+    async def _try_one_attempt(self, instance: ModelInstance, request: InferenceRequest, start_time: float, tracer) -> InferenceResponse:
+        """单次转发尝试 (v4 提取)."""
+        with tracer.start_as_current_span("engine_inference") as infer_span:
+            infer_span.set_attribute("instance_id", instance.instance_id)
+            infer_span.set_attribute("engine_type", instance.engine_type)
+            adapter = self._get_adapter(instance)
+            url, headers, body = adapter.build_request(instance, request)
+            client = self._get_client()
+            response = await client.post(url, json=body, headers=headers, timeout=self._timeout)
+            infer_span.set_attribute("http_status_code", response.status_code)
+
+        if response.status_code >= 500:
+            return InferenceResponse(
+                request_id=request.request_id,
+                instance_id=instance.instance_id,
+                status="error",
+                error_message=f"Upstream returned {response.status_code}",
+                latency_ms=(time.monotonic() - start_time) * 1000,
+            )
+
+        raw = response.json()
+        with tracer.start_as_current_span("parse_response"):
+            adapter2 = self._get_adapter(instance)
+            inference_response = adapter2.parse_response(raw)
+            inference_response.request_id = request.request_id
+            inference_response.instance_id = instance.instance_id
+            inference_response.latency_ms = (time.monotonic() - start_time) * 1000
+
+        if inference_response.status == "ok":
+            cb = self._get_cb(instance.instance_id)
+            if cb:
+                cb.record_success()
+            if self._metrics:
+                usage = inference_response.usage or TokenUsage()
+                self._metrics.record_request(instance.instance_id, inference_response.latency_ms, 0.0, usage, success=True)
+            if hasattr(self._balancer, "record_performance") and inference_response.usage:
+                self._balancer.record_performance(instance.instance_id, inference_response.usage.completion_tokens, inference_response.latency_ms)
+            if hasattr(self._balancer, "record_success"):
+                self._balancer.record_success(instance.instance_id)
+
+        return inference_response
+
+    def _make_error_resp(self, request: InferenceRequest, instance: ModelInstance, status: str, message: str, start_time: float) -> InferenceResponse:
+        """构造错误响应 (v4 helper)."""
+        return InferenceResponse(
+            request_id=request.request_id,
+            instance_id=instance.instance_id,
+            status=status,
+            error_message=message,
+            latency_ms=(time.monotonic() - start_time) * 1000,
+        )
 
     async def forward_stream(self, request: InferenceRequest) -> AsyncIterator[str]:
         """转发流式推理请求，返回 SSE chunk 的异步迭代器。

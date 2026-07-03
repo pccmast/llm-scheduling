@@ -28,6 +28,7 @@ from src.shared.config import load_config, load_yaml_config
 from src.shared.logging import get_logger, setup_logging
 from src.shared.models import (
     HealthCheckConfig,
+    RoutingConfig,
     ScaleConfig,
 )
 
@@ -77,6 +78,7 @@ async def lifespan(app: FastAPI):
         circuit_breakers=cb_registry,
         metrics=metrics,
         timeout=settings.upstream_timeout,
+        routing_config=RoutingConfig(**yaml_config.get("routing", {})),
     )
 
     # 7. Request Queue

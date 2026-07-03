@@ -184,7 +184,7 @@ class TestForwardErrors:
         balancer: MagicMock,
         inference_request: InferenceRequest,
     ) -> None:
-        """即使上游报错，on_request_start 和 on_request_end 仍然成对调用。"""
+        """即使上游报错，on_request_start 和 on_request_end 仍然成对调用。(v4: 重试循环)"""
         mock_client = MagicMock()
 
         async def _conn_error(*args, **kwargs):
@@ -195,8 +195,9 @@ class TestForwardErrors:
         with patch.object(proxy, "_get_client", return_value=mock_client):
             await proxy.forward(inference_request)
 
-            balancer.on_request_start.assert_called_once()
-            balancer.on_request_end.assert_called_once()
+            # v4: 重试循环 — 单实例时每次尝试都调用 start/end
+            assert balancer.on_request_start.call_count >= 1
+            assert balancer.on_request_start.call_count == balancer.on_request_end.call_count
 
 
 class TestCircuitBreaker:

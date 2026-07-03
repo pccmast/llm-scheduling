@@ -132,6 +132,15 @@ class BalancerWeights(BaseModel):
     load: float = 1.0           # load 权重: 0 = 忽略当前负载
 
 
+class RoutingConfig(BaseModel):
+    """路由重试与 fallback 配置 (v4 新增)。"""
+
+    max_retries: int = 2                          # 最多重试次数 (总尝试 = 1 + max_retries)
+    retry_on_timeout: bool = True                  # 超时后换实例重试
+    retry_on_5xx: bool = True                      # 服务端错误后换实例重试
+    retry_on_connection: bool = True               # 连接失败后换实例重试
+
+
 class ScaleConfig(BaseModel):
     """自动扩缩容的配置参数。
 
