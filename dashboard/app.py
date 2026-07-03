@@ -1,12 +1,7 @@
-"""LLM Dispatcher Dashboard — Streamlit 入口。
-
-提供全局概览、实例详情和扩缩容历史页面的 Web 界面。
-启动方式: uv run streamlit run dashboard/app.py
-"""
-
+"""LLM Dispatcher Dashboard v4 — Streamlit 入口。"""
 import streamlit as st
 
-st.set_page_config(page_title="LLM Dispatcher", layout="wide")
+st.set_page_config(page_title="LLM Dispatcher v4", layout="wide")
 
 pages = {
     "Overview": [
@@ -14,6 +9,9 @@ pages = {
     ],
     "Instances": [
         st.Page("pages/instances.py", title="实例详情", icon="🖥️"),
+    ],
+    "Balancer": [
+        st.Page("pages/balancer.py", title="调度器内部", icon="⚖️"),
     ],
     "Scaling": [
         st.Page("pages/scaling.py", title="扩缩容", icon="📈"),

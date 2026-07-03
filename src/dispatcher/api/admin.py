@@ -98,6 +98,34 @@ async def get_status(request: Request) -> dict:
     }
 
 
+@admin_router.get("/balancer/debug")
+async def get_balancer_debug(request: Request) -> dict:
+    """获取 balancer 内部状态 (v4 新增: speed/reliability/cooldown/load)."""
+    balancer = request.app.state.balancer
+    if balancer is None:
+        return {"error": "Balancer not configured"}
+
+    registry = request.app.state.registry
+    result: dict = {}
+    for inst in registry.list_all():
+        iid = inst.instance_id
+        result[iid] = {
+            "tier": inst.tier.value,
+            "model": inst.model,
+            "capacity_factor": inst.capacity_factor,
+            "status": inst.status.value,
+        }
+        if hasattr(balancer, "get_speed"):
+            result[iid]["speed_tok_s"] = round(balancer.get_speed(iid), 1)
+        if hasattr(balancer, "get_reliability"):
+            result[iid]["reliability"] = round(balancer.get_reliability(iid), 3)
+        if hasattr(balancer, "get_load"):
+            result[iid]["load"] = round(balancer.get_load(iid), 1)
+        if hasattr(balancer, "is_in_cooldown"):
+            result[iid]["in_cooldown"] = balancer.is_in_cooldown(iid)
+
+    return {"instances": result}
+
 @admin_router.get("/metrics/summary")
 async def get_metrics_summary(request: Request) -> dict:
     """获取指标汇总数据。"""
