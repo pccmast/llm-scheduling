@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import httpx
 
@@ -55,9 +56,15 @@ class HealthChecker:
 
         url = adapter.health_endpoint(instance)
         timeout = self._config.timeout_seconds
+        headers: dict[str, str] = {}
+
+        # 后端需要鉴权时携带 API Key（如 LM Studio）
+        api_key = os.environ.get("BACKEND_API_KEY", "")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
                 response = await client.get(url)
                 return response.status_code < 500
         except Exception:

@@ -79,4 +79,9 @@ class VLLMAdapter(EngineAdapter):
             )
 
     def health_endpoint(self, instance: ModelInstance) -> str:
-        return instance.address.rstrip("/") + "/health"
+        """返回 OpenAI 兼容的 /v1/models 端点作为健康检查。
+
+        LM Studio、vLLM 等 OpenAI 兼容后端都原生支持此端点。
+        无需 /health（LM Studio 没有该端点会打 ERROR 日志）。
+        """
+        return instance.address.rstrip("/") + "/v1/models"
