@@ -28,7 +28,23 @@
 
 ## 快速开始
 
-### 本地 LM Studio (真实模型)
+| 环境 | 启动命令 | 热更新 | 说明 |
+|------|---------|:--:|------|
+| **开发** | `uv run python scripts/dev.py` | ✅ | Mock 引擎 + 自动注册 + 一键启停 |
+| **生产** | `uv run uvicorn ... --factory --port 9090` | ❌ | 真实后端 + YAML 静态配置 |
+| **Docker** | `docker compose up -d` | ❌ | 健康检查 + 自动重启 + 冒烟测试 |
+
+### 开发环境（日常使用，推荐）
+
+```bash
+uv run python scripts/dev.py          # 2 mock + dispatcher + 自动注册
+uv run python scripts/dev.py --dispatch-only  # 仅调度器 (外接 LM Studio)
+uv run python scripts/dev.py --mock-only      # 仅 mock引擎
+```
+
+> 改 `src/` `config/` 代码后自动热重载。Ctrl+C 一键清理所有进程。
+
+### 生产部署
 
 ```bash
 # 1. 复制环境变量
