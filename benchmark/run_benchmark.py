@@ -180,10 +180,10 @@ async def register_instances() -> bool:
         for i, port in enumerate(MOCK_PORTS):
             inst_id = f"mock-{['fast', 'medium', 'slow'][i]}"
             r = await client.post(
-                f"http://localhost:{DISPATCHER_PORT}/admin/instances",
+                f"http://127.0.0.1:{DISPATCHER_PORT}/admin/instances",
                 json={
                     "instance_id": inst_id,
-                    "address": f"http://localhost:{port}",
+                    "address": f"http://127.0.0.1:{port}",
                     "model": "test-model",
                     "engine_type": "ollama",
                     "capacity_factor": 1.0,
@@ -199,14 +199,14 @@ async def register_instances() -> bool:
 async def inject_fault(port: int, count: int) -> None:
     """ mock """
     async with httpx.AsyncClient() as client:
-        r = await client.post(f"http://localhost:{port}/admin/fail/{count}")
+        r = await client.post(f"http://127.0.0.1:{port}/admin/fail/{count}")
         print(info(f"  [] port {port}:  {count}  500"))
 
 
 async def reset_fault(port: int) -> None:
     """ mock """
     async with httpx.AsyncClient() as client:
-        r = await client.post(f"http://localhost:{port}/admin/reset")
+        r = await client.post(f"http://127.0.0.1:{port}/admin/reset")
         print(info(f"  [] port {port}: "))
 
 
@@ -229,7 +229,7 @@ def run_locust(
         sys.executable,
         "-m", "locust",
         "-f", str(BENCHMARK_DIR / "locustfile.py"),
-        f"--host=http://localhost:{DISPATCHER_PORT}",
+        f"--host=http://127.0.0.1:{DISPATCHER_PORT}",
         f"--users={users}",
         "--spawn-rate=10",
         f"--run-time={run_time}s",
@@ -270,12 +270,12 @@ async def run_baseline_experiment(pm: ProcessManager, users: int, run_time: int)
 
     pm.start_mock_engines()
     for port in MOCK_PORTS:
-        if not await wait_for_service(f"http://localhost:{port}/health"):
+        if not await wait_for_service(f"http://127.0.0.1:{port}/health"):
             print(fail(f"  Mock  {port} "))
             return {}
 
     pm.start_dispatcher(strategy="weighted")
-    if not await wait_for_service(f"http://localhost:{DISPATCHER_PORT}/health"):
+    if not await wait_for_service(f"http://127.0.0.1:{DISPATCHER_PORT}/health"):
         print(fail("  "))
         return {}
 
@@ -315,12 +315,12 @@ async def run_strategy_experiment(pm: ProcessManager, users: int, run_time: int)
 
         pm.start_mock_engines()
         for port in MOCK_PORTS:
-            if not await wait_for_service(f"http://localhost:{port}/health"):
+            if not await wait_for_service(f"http://127.0.0.1:{port}/health"):
                 print(fail(f"  Mock  {port} "))
                 continue
 
         pm.start_dispatcher(strategy=strategy)
-        if not await wait_for_service(f"http://localhost:{DISPATCHER_PORT}/health"):
+        if not await wait_for_service(f"http://127.0.0.1:{DISPATCHER_PORT}/health"):
             print(fail("  "))
             continue
 
@@ -358,12 +358,12 @@ async def run_circuit_experiment(pm: ProcessManager, users: int, run_time: int) 
 
     pm.start_mock_engines()
     for port in MOCK_PORTS:
-        if not await wait_for_service(f"http://localhost:{port}/health"):
+        if not await wait_for_service(f"http://127.0.0.1:{port}/health"):
             print(fail(f"  Mock  {port} "))
             return {}
 
     pm.start_dispatcher(strategy="weighted")
-    if not await wait_for_service(f"http://localhost:{DISPATCHER_PORT}/health"):
+    if not await wait_for_service(f"http://127.0.0.1:{DISPATCHER_PORT}/health"):
         print(fail("  "))
         return {}
 
@@ -383,7 +383,7 @@ async def run_circuit_experiment(pm: ProcessManager, users: int, run_time: int) 
             sys.executable,
             "-m", "locust",
             "-f", str(BENCHMARK_DIR / "locustfile.py"),
-            f"--host=http://localhost:{DISPATCHER_PORT}",
+            f"--host=http://127.0.0.1:{DISPATCHER_PORT}",
             f"--users={users}",
             "--spawn-rate=10",
             f"--run-time={run_time}s",
@@ -451,13 +451,13 @@ async def run_queue_experiment(pm: ProcessManager, users: int, run_time: int) ->
 
     pm.start_mock_engines()
     for port in MOCK_PORTS:
-        if not await wait_for_service(f"http://localhost:{port}/health"):
+        if not await wait_for_service(f"http://127.0.0.1:{port}/health"):
             print(fail(f"  Mock  {port} "))
             config_path.write_text(original_config, encoding="utf-8")
             return {}
 
     pm.start_dispatcher(strategy="weighted")
-    if not await wait_for_service(f"http://localhost:{DISPATCHER_PORT}/health"):
+    if not await wait_for_service(f"http://127.0.0.1:{DISPATCHER_PORT}/health"):
         print(fail("  "))
         config_path.write_text(original_config, encoding="utf-8")
         return {}
@@ -494,12 +494,12 @@ async def run_overhead_experiment(pm: ProcessManager, users: int, run_time: int)
 
     pm.start_mock_engines(latencies=[0, 0, 0])
     for port in MOCK_PORTS:
-        if not await wait_for_service(f"http://localhost:{port}/health"):
+        if not await wait_for_service(f"http://127.0.0.1:{port}/health"):
             print(fail(f"  Mock  {port} "))
             return {}
 
     pm.start_dispatcher(strategy="weighted")
-    if not await wait_for_service(f"http://localhost:{DISPATCHER_PORT}/health"):
+    if not await wait_for_service(f"http://127.0.0.1:{DISPATCHER_PORT}/health"):
         print(fail("  "))
         return {}
 

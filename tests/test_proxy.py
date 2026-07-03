@@ -29,7 +29,7 @@ def registry() -> InstanceRegistry:
     r.register(
         ModelInstance(
             instance_id="i1",
-            address="http://localhost:8000",
+            address="http://127.0.0.1:8000",
             model="test-model",
             engine_type="ollama",
         )
@@ -37,7 +37,7 @@ def registry() -> InstanceRegistry:
     r.register(
         ModelInstance(
             instance_id="i2",
-            address="http://localhost:8001",
+            address="http://127.0.0.1:8001",
             model="test-model",
             engine_type="ollama",
         )
@@ -50,7 +50,7 @@ def balancer() -> MagicMock:
     b = MagicMock(spec=LoadBalancer)
     b.select.return_value = ModelInstance(
         instance_id="i1",
-        address="http://localhost:8000",
+        address="http://127.0.0.1:8000",
         model="test-model",
         engine_type="ollama",
     )
@@ -229,7 +229,7 @@ class TestCircuitBreaker:
         balancer = MagicMock(spec=LoadBalancer)
         balancer.select.return_value = ModelInstance(
             instance_id="i2",
-            address="http://localhost:8001",
+            address="http://127.0.0.1:8001",
             model="test-model",
             engine_type="ollama",
         )
@@ -302,7 +302,7 @@ class TestMetrics:
         balancer = MagicMock(spec=LoadBalancer)
         balancer.select.return_value = ModelInstance(
             instance_id="i1",
-            address="http://localhost:8000",
+            address="http://127.0.0.1:8000",
             model="test-model",
             engine_type="ollama",
         )

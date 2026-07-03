@@ -22,7 +22,7 @@ def sample_instance() -> ModelInstance:
     """返回一个标准测试实例。"""
     return ModelInstance(
         instance_id="i1",
-        address="http://localhost:8000",
+        address="http://127.0.0.1:8000",
         model="llama-3",
         engine_type="ollama",
     )
@@ -37,7 +37,7 @@ class TestRegisterAndGet:
         retrieved = registry.get("i1")
         assert retrieved.instance_id == "i1"
         assert retrieved.model == "llama-3"
-        assert retrieved.address == "http://localhost:8000"
+        assert retrieved.address == "http://127.0.0.1:8000"
 
     def test_register_duplicate_id_raises_error(
         self, registry: InstanceRegistry, sample_instance: ModelInstance

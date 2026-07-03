@@ -29,7 +29,7 @@ import pytest
 MOCK1_PORT = 8191
 MOCK2_PORT = 8192
 DISPATCHER_PORT = 9290
-DISPATCHER_URL = f"http://localhost:{DISPATCHER_PORT}"
+DISPATCHER_URL = f"http://127.0.0.1:{DISPATCHER_PORT}"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -80,9 +80,9 @@ def e2e_services():
         )
 
         # 等待 mock 引擎就绪
-        if not asyncio.run(wait_for_http(f"http://localhost:{MOCK1_PORT}/health", timeout=15)):
+        if not asyncio.run(wait_for_http(f"http://127.0.0.1:{MOCK1_PORT}/health", timeout=15)):
             raise RuntimeError("Mock engine 1 failed to start")
-        if not asyncio.run(wait_for_http(f"http://localhost:{MOCK2_PORT}/health", timeout=15)):
+        if not asyncio.run(wait_for_http(f"http://127.0.0.1:{MOCK2_PORT}/health", timeout=15)):
             raise RuntimeError("Mock engine 2 failed to start")
 
         # 启动 dispatcher
@@ -145,7 +145,7 @@ class TestE2EServiceLifecycle:
                 f"{DISPATCHER_URL}/admin/instances",
                 json={
                     "instance_id": inst_id,
-                    "address": f"http://localhost:{port}",
+                    "address": f"http://127.0.0.1:{port}",
                     "model": "test-model",
                     "engine_type": "ollama",
                 },
@@ -250,10 +250,10 @@ class TestE2ECircuitBreaker:
     async def test_fault_injection_opens_circuit(self, e2e_client: httpx.AsyncClient) -> None:
         """注入故障使 e2e-1 连续失败 → 熔断器 OPEN。"""
         # 重置 mock 引擎状态
-        await e2e_client.post(f"http://localhost:{MOCK1_PORT}/admin/reset")
+        await e2e_client.post(f"http://127.0.0.1:{MOCK1_PORT}/admin/reset")
 
         # 注入 20 次故障
-        await e2e_client.post(f"http://localhost:{MOCK1_PORT}/admin/fail/20")
+        await e2e_client.post(f"http://127.0.0.1:{MOCK1_PORT}/admin/fail/20")
 
         # 发送 8 个请求触发熔断
         errors = 0
@@ -277,7 +277,7 @@ class TestE2ECircuitBreaker:
 
         # 恢复：重置熔断器 + 清除故障
         await e2e_client.post(f"{DISPATCHER_URL}/admin/circuit-breakers/e2e-1/reset")
-        await e2e_client.post(f"http://localhost:{MOCK1_PORT}/admin/reset")
+        await e2e_client.post(f"http://127.0.0.1:{MOCK1_PORT}/admin/reset")
 
         # 验证恢复正常
         resp = await e2e_client.post(

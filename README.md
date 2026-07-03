@@ -57,7 +57,7 @@ uv run python scripts/mock_engine.py --port 8001
 uv run uvicorn src.dispatcher.main:create_app --factory --port 9090
 
 curl -X POST http://127.0.0.1:9090/admin/instances \
-  -d '{"instance_id":"mock-1","address":"http://localhost:8001","model":"test-model","engine_type":"ollama"}'
+  -d '{"instance_id":"mock-1","address":"http://127.0.0.1:8001","model":"test-model","engine_type":"ollama"}'
 ```
 
 ## 部署拓扑

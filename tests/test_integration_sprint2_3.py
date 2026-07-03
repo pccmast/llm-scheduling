@@ -39,10 +39,10 @@ from src.shared.models import (
 def registry() -> InstanceRegistry:
     r = InstanceRegistry()
     r.register(
-        ModelInstance(instance_id="i1", address="http://localhost:8001", model="test-model", engine_type="ollama")
+        ModelInstance(instance_id="i1", address="http://127.0.0.1:8001", model="test-model", engine_type="ollama")
     )
     r.register(
-        ModelInstance(instance_id="i2", address="http://localhost:8002", model="test-model", engine_type="ollama")
+        ModelInstance(instance_id="i2", address="http://127.0.0.1:8002", model="test-model", engine_type="ollama")
     )
     return r
 
@@ -334,7 +334,7 @@ class TestAdminRegistry:
 
     def test_register_updates_registry(self) -> None:
         r = InstanceRegistry()
-        inst = ModelInstance(instance_id="new-1", address="http://localhost:9000", model="m1", engine_type="ollama")
+        inst = ModelInstance(instance_id="new-1", address="http://127.0.0.1:9000", model="m1", engine_type="ollama")
         r.register(inst)
         assert r.count == 1
         assert r.get("new-1").model == "m1"

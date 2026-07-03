@@ -16,7 +16,7 @@ def sample_instance() -> dict:
     """返回一个标准的 ModelInstance 配置字典（用于测试 fixture 创建）。"""
     return {
         "instance_id": "test-instance-1",
-        "address": "http://localhost:8001",
+        "address": "http://127.0.0.1:8001",
         "model": "llama-3",
         "engine_type": "ollama",
         "max_concurrent": 10,

@@ -25,7 +25,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 MOCK_PORT = 8001
 MOCK_PORT2 = 8002
 DISPATCHER_PORT = 9090
-DISPATCHER_URL = f"http://localhost:{DISPATCHER_PORT}"
+DISPATCHER_URL = f"http://127.0.0.1:{DISPATCHER_PORT}"
 
 # ── 终端着色 ──────────────────────────────────────────────────
 GREEN = "\033[32m"
@@ -114,12 +114,12 @@ async def main():
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
-        if not await wait_for_service(f"http://localhost:{MOCK_PORT}/health"):
+        if not await wait_for_service(f"http://127.0.0.1:{MOCK_PORT}/health"):
             print(fail("  Mock 引擎 1 启动失败，退出。"))
             return
         check("Mock 引擎 1 就绪 (port 8001)", True)
 
-        if not await wait_for_service(f"http://localhost:{MOCK_PORT2}/health"):
+        if not await wait_for_service(f"http://127.0.0.1:{MOCK_PORT2}/health"):
             print(fail("  Mock 引擎 2 启动失败，退出。"))
             return
         check("Mock 引擎 2 就绪 (port 8002)", True)
@@ -150,12 +150,12 @@ async def main():
                     f"{DISPATCHER_URL}/admin/instances",
                     json={
                         "instance_id": inst_id,
-                        "address": f"http://localhost:{port}",
+                        "address": f"http://127.0.0.1:{port}",
                         "model": "test-model",
                         "engine_type": "ollama",
                     },
                 )
-                check(f"注册 {inst_id} (→ localhost:{port})", r.status_code == 200)
+                check(f"注册 {inst_id} (→ 127.0.0.1:{port})", r.status_code == 200)
 
             # 查看注册表
             r = await client.get(f"{DISPATCHER_URL}/admin/status")
@@ -318,7 +318,7 @@ async def main():
 
             # 6a. 注入故障
             print(f"  {info('6a. 注入故障')}: mock-1 接下来 20 个请求返回 500...")
-            await client.post(f"http://localhost:{MOCK_PORT}/admin/fail/20")
+            await client.post(f"http://127.0.0.1:{MOCK_PORT}/admin/fail/20")
             check("mock-1 设置为故障模式", True)
 
             # 6b. 发送请求触发熔断
@@ -356,7 +356,7 @@ async def main():
             # 6d. 重置熔断器 + 恢复 mock 引擎
             print(f"\n  {info('6c. 恢复')}: 重置熔断器 + 清除 mock-1 故障...")
             await client.post(f"{DISPATCHER_URL}/admin/circuit-breakers/mock-1/reset")
-            await client.post(f"http://localhost:{MOCK_PORT}/admin/reset")
+            await client.post(f"http://127.0.0.1:{MOCK_PORT}/admin/reset")
 
             # 验证恢复
             r = await client.post(

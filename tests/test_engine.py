@@ -20,7 +20,7 @@ def adapter() -> OllamaAdapter:
 def instance() -> ModelInstance:
     return ModelInstance(
         instance_id="ollama-1",
-        address="http://localhost:11434",
+        address="http://127.0.0.1:11434",
         model="llama-3",
         engine_type="ollama",
     )
@@ -52,7 +52,7 @@ class TestOllamaBuildRequest:
         self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest
     ) -> None:
         url, headers, body = adapter.build_request(instance, inference_request)
-        assert url == "http://localhost:11434/api/chat"
+        assert url == "http://127.0.0.1:11434/api/chat"
 
     def test_build_request_headers(
         self, adapter: OllamaAdapter, instance: ModelInstance, inference_request: InferenceRequest
@@ -75,12 +75,12 @@ class TestOllamaBuildRequest:
     ) -> None:
         instance = ModelInstance(
             instance_id="ollama-1",
-            address="http://localhost:11434/",
+            address="http://127.0.0.1:11434/",
             model="llama-3",
             engine_type="ollama",
         )
         url, _, _ = adapter.build_request(instance, inference_request)
-        assert url == "http://localhost:11434/api/chat"
+        assert url == "http://127.0.0.1:11434/api/chat"
 
     def test_build_request_stream(self, adapter: OllamaAdapter, instance: ModelInstance) -> None:
         req = InferenceRequest(
@@ -142,13 +142,13 @@ class TestOllamaHealthEndpoint:
     """health_endpoint 测试。"""
 
     def test_health_endpoint(self, adapter: OllamaAdapter, instance: ModelInstance) -> None:
-        assert adapter.health_endpoint(instance) == "http://localhost:11434/api/tags"
+        assert adapter.health_endpoint(instance) == "http://127.0.0.1:11434/api/tags"
 
     def test_health_endpoint_with_trailing_slash(self, adapter: OllamaAdapter) -> None:
         instance = ModelInstance(
             instance_id="o1",
-            address="http://localhost:11434/",
+            address="http://127.0.0.1:11434/",
             model="llama-3",
             engine_type="ollama",
         )
-        assert adapter.health_endpoint(instance) == "http://localhost:11434/api/tags"
+        assert adapter.health_endpoint(instance) == "http://127.0.0.1:11434/api/tags"

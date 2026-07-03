@@ -30,7 +30,7 @@ def mock_adapter() -> MagicMock:
     """Mock EngineAdapter 用于健康检查测试。"""
     adapter = MagicMock(spec=EngineAdapter)
     adapter.engine_type = "ollama"
-    adapter.health_endpoint.return_value = "http://localhost:8000/health"
+    adapter.health_endpoint.return_value = "http://127.0.0.1:8000/health"
     return adapter
 
 
@@ -48,7 +48,7 @@ def health_config() -> HealthCheckConfig:
 def instance() -> ModelInstance:
     return ModelInstance(
         instance_id="test-1",
-        address="http://localhost:8000",
+        address="http://127.0.0.1:8000",
         model="test-model",
         engine_type="ollama",
     )
@@ -200,7 +200,7 @@ class TestStop:
         registry = InstanceRegistry()
         mock_adapter = MagicMock(spec=EngineAdapter)
         mock_adapter.engine_type = "ollama"
-        mock_adapter.health_endpoint.return_value = "http://localhost/health"
+        mock_adapter.health_endpoint.return_value = "http://127.0.0.1/health"
         config = HealthCheckConfig(interval_seconds=10.0, timeout_seconds=5.0)
         checker = HealthChecker(registry, {"ollama": mock_adapter}, config)
 

@@ -24,7 +24,7 @@ def registry() -> InstanceRegistry:
     r.register(
         ModelInstance(
             instance_id="i1",
-            address="http://localhost:8000",
+            address="http://127.0.0.1:8000",
             model="test-model",
             engine_type="ollama",
         )
@@ -181,7 +181,7 @@ class TestAdmin:
             "/admin/instances",
             json={
                 "instance_id": "i2",
-                "address": "http://localhost:8001",
+                "address": "http://127.0.0.1:8001",
                 "model": "test-model",
                 "engine_type": "vllm",
             },
@@ -195,7 +195,7 @@ class TestAdmin:
             "/admin/instances",
             json={
                 "instance_id": "i1",
-                "address": "http://localhost:8000",
+                "address": "http://127.0.0.1:8000",
                 "model": "test-model",
                 "engine_type": "ollama",
             },

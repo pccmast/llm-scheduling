@@ -14,7 +14,7 @@ REAL_DATA = {
     "medium": {"mean": 5818, "median": 5750, "p90": 5980, "p95": 6000, "std": 120, "n": 3},
 }
 
-MOCK_URLS = ["http://localhost:8001", "http://localhost:8002"]
+MOCK_URLS = ["http://127.0.0.1:8001", "http://127.0.0.1:8002"]
 
 def mock_distribution(mean_ms, sigma, n=100):
     """模拟 mock 的延迟分布。"""

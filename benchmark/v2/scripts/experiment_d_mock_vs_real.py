@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 
 MOCK_PORTS = [8001, 8002]
-GPU_URL = "http://localhost:14344/v1/chat/completions"
+GPU_URL = "http://127.0.0.1:14344/v1/chat/completions"
 GPU_KEY = "sk-lm-cR1GVaJg:W0pVeY0MwNSkiaJY3llG"
 MODEL = "minicpm-v-4.6"
 PROMPT = "Hi"
@@ -42,7 +42,7 @@ async def call_gpu(client):
 async def call_mock(client, port):
     start = time.perf_counter()
     resp = await client.post(
-        f"http://localhost:{port}/v1/chat/completions",
+        f"http://127.0.0.1:{port}/v1/chat/completions",
         headers={"Authorization": f"Bearer {GPU_KEY}", "Content-Type": "application/json"},
         json={"model": MODEL, "messages": [{"role": "user", "content": PROMPT}], "max_tokens": MAX_TOKENS},
         timeout=60,

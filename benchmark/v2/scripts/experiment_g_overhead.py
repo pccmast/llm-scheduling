@@ -8,12 +8,12 @@ from pathlib import Path
 import httpx
 
 # 真实 GPU
-GPU_URL = "http://localhost:14344/v1/chat/completions"
+GPU_URL = "http://127.0.0.1:14344/v1/chat/completions"
 GPU_KEY = "sk-lm-cR1GVaJg:W0pVeY0MwNSkiaJY3llG"
 MODEL = "minicpm-v-4.6"
 
 # Dispatcher 代理 (需要先启动)
-PROXY_URL = "http://localhost:8000/v1/chat/completions"
+PROXY_URL = "http://127.0.0.1:8000/v1/chat/completions"
 PROMPT = "Hi"
 MAX_TOKENS = 10
 N = 50

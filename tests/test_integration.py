@@ -29,7 +29,7 @@ def registry() -> InstanceRegistry:
     r.register(
         ModelInstance(
             instance_id="i1",
-            address="http://localhost:8001",
+            address="http://127.0.0.1:8001",
             model="test-model",
             engine_type="ollama",
         )
@@ -118,7 +118,7 @@ class TestBalancerProxyChain:
         registry.register(
             ModelInstance(
                 instance_id="i2",
-                address="http://localhost:8002",
+                address="http://127.0.0.1:8002",
                 model="test-model",
                 engine_type="ollama",
             )
@@ -193,7 +193,7 @@ class TestEngineAdapterProxy:
 
         url, headers, body = adapter.build_request(instance, req)
         # 验证 URL 格式
-        assert url == "http://localhost:8001/api/chat"
+        assert url == "http://127.0.0.1:8001/api/chat"
         assert headers["Content-Type"] == "application/json"
         assert body["model"] == "test-model"
         assert body["messages"] == [{"role": "user", "content": "Hello"}]
