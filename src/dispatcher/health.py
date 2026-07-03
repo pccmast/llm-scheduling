@@ -64,7 +64,7 @@ class HealthChecker:
             headers["Authorization"] = f"Bearer {api_key}"
 
         try:
-            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+            async with httpx.AsyncClient(timeout=timeout, headers=headers, trust_env=False) as client:
                 response = await client.get(url)
                 return response.status_code < 500
         except Exception:
@@ -81,7 +81,7 @@ class HealthChecker:
         Postcondition:
             registry 中的实例状态会根据探测结果自动更新。
         """
-        self._client = httpx.AsyncClient()
+        self._client = httpx.AsyncClient(trust_env=False)
         try:
             while not self._stopped.is_set():
                 await self._check_all_instances()

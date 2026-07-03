@@ -72,7 +72,7 @@ class RoutingProxy:
     def _get_client(self) -> httpx.AsyncClient:
         """获取或创建 httpx 客户端。"""
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self._timeout)
+            self._client = httpx.AsyncClient(timeout=self._timeout, trust_env=False)
         return self._client
 
     async def forward(self, request: InferenceRequest) -> InferenceResponse:
