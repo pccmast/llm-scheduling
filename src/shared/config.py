@@ -2,6 +2,8 @@
 
 通过 Pydantic Settings 加载调度器全局配置，支持 YAML 文件和环境变量覆盖。
 配置优先级：环境变量 DISPATCHER_* > YAML 文件 > 默认值。
+
+启动时自动加载项目根目录下的 .env 文件（如存在）。
 """
 
 from __future__ import annotations
@@ -9,7 +11,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+
+# 启动时加载 .env，将文件中的变量注入 os.environ
+# 优先级：已存在的环境变量 > .env 文件
+load_dotenv(override=False)
 
 
 class DispatcherSettings(BaseSettings):

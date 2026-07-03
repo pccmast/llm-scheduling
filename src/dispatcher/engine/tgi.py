@@ -2,9 +2,13 @@
 
 实现 TGI (Text Generation Inference) 引擎的适配器。
 TGI 使用 /generate 端点，需要将 messages 拼接为单个 prompt 字符串。
+
+通过环境变量 BACKEND_API_KEY 可配置后端鉴权密钥。
 """
 
 from __future__ import annotations
+
+import os
 
 from src.shared.models import EngineAdapter, InferenceRequest, InferenceResponse, ModelInstance, TokenUsage
 
@@ -23,7 +27,12 @@ class TGIAdapter(EngineAdapter):
         格式: <|system|>...<|user|>...<|assistant|>...（ChatML 风格）。
         """
         url = instance.address.rstrip("/") + "/generate"
-        headers = {"Content-Type": "application/json"}
+        headers: dict = {"Content-Type": "application/json"}
+
+        # 后端 API Key（可选）
+        api_key = os.environ.get("BACKEND_API_KEY", "")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
         # 拼接 messages 为 prompt，保留角色信息
         parts: list[str] = []

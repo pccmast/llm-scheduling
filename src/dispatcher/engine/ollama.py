@@ -1,9 +1,13 @@
 """Module 5: OllamaAdapter — 规格书 §4 Module 5.
 
 实现 Ollama 推理引擎的适配器，处理 Ollama /api/chat 格式的请求构建和响应解析。
+
+通过环境变量 BACKEND_API_KEY 可配置后端鉴权密钥。
 """
 
 from __future__ import annotations
+
+import os
 
 from src.shared.models import EngineAdapter, InferenceRequest, InferenceResponse, ModelInstance, TokenUsage
 
@@ -12,6 +16,7 @@ class OllamaAdapter(EngineAdapter):
     """Ollama 推理引擎适配器。
 
     处理 Ollama 专有格式的请求构建和响应解析。
+    设置 BACKEND_API_KEY 环境变量后自动携带 Authorization header。
     """
 
     @property
@@ -27,12 +32,18 @@ class OllamaAdapter(EngineAdapter):
         Returns:
             (url, headers, body) 其中：
             - url = instance.address + "/api/chat"
-            - headers = {"Content-Type": "application/json"}
+            - headers = {"Content-Type": "application/json"} + 可选的 Authorization
             - body = {"model": request.model, "messages": request.messages,
                       "stream": request.stream, "options": {"temperature": ...}}
         """
         url = instance.address.rstrip("/") + "/api/chat"
-        headers = {"Content-Type": "application/json"}
+        headers: dict = {"Content-Type": "application/json"}
+
+        # 后端 API Key（可选）
+        api_key = os.environ.get("BACKEND_API_KEY", "")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
         body: dict = {
             "model": request.model,
             "messages": request.messages,

@@ -1,16 +1,24 @@
 """Module 5: VLLMAdapter — 规格书 §4 Module 5.
 
 实现 vLLM 推理引擎的适配器，处理 OpenAI 兼容格式的请求构建和响应解析。
-vLLM 完全兼容 OpenAI 格式。
+vLLM 完全兼容 OpenAI 格式。同时支持 LM Studio 等 OpenAI 兼容后端。
+
+通过环境变量 BACKEND_API_KEY 可配置后端鉴权密钥（如 LM Studio 需要）。
 """
 
 from __future__ import annotations
+
+import os
 
 from src.shared.models import EngineAdapter, InferenceRequest, InferenceResponse, ModelInstance, TokenUsage
 
 
 class VLLMAdapter(EngineAdapter):
-    """vLLM 推理引擎适配器。vLLM 提供 OpenAI 兼容的 API。"""
+    """vLLM 推理引擎适配器。vLLM 提供 OpenAI 兼容的 API。
+
+    同时兼容 LM Studio 等任意 OpenAI 格式后端。
+    设置 BACKEND_API_KEY 环境变量后自动携带 Authorization header。
+    """
 
     @property
     def engine_type(self) -> str:
@@ -23,7 +31,13 @@ class VLLMAdapter(EngineAdapter):
             (url, headers, body)
         """
         url = instance.address.rstrip("/") + "/v1/chat/completions"
-        headers = {"Content-Type": "application/json"}
+        headers: dict = {"Content-Type": "application/json"}
+
+        # 后端 API Key（如 LM Studio 需要 sk-lm-xxx）
+        api_key = os.environ.get("BACKEND_API_KEY", "")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
         body: dict = {
             "model": request.model,
             "messages": request.messages,
