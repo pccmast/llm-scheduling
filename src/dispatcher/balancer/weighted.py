@@ -79,7 +79,8 @@ class WeightedBalancer(LoadBalancer):
         self._cooldown_until.pop(instance_id, None)
 
     def record_performance(self, instance_id: str, completion_tokens: int, duration_ms: float) -> None:
-        if duration_ms <= 0 or completion_tokens <= 0: return
+        if duration_ms <= 0 or completion_tokens <= 0:
+            return
         new_speed = completion_tokens / duration_ms * 1000
         old = self._speed_ewma.get(instance_id, new_speed)
         self._speed_ewma[instance_id] = self._alpha * new_speed + (1 - self._alpha) * old

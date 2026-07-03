@@ -170,7 +170,7 @@ class HealthChecker:
 
     async def _deep_check_and_update(self, instance: ModelInstance) -> None:
         """深检单个实例 — 验证模型推理能力。失败不计入 unhealthy 计数，仅用于观察。"""
-        ok = await self.deep_check_one(instance)
+        _ = await self.deep_check_one(instance)
         # v4.3: 深检结果可用于降级标记 (后续迭代)
         # proxy 的每次真实请求已自动回写性能, 深检专注"能否生成"这个布尔判断
 
