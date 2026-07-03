@@ -46,3 +46,6 @@ dashboard/
 
 # Config backups
 config/*.bak
+
+# Environment secrets (never in image)
+.env
