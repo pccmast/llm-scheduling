@@ -48,7 +48,8 @@ class WeightedBalancer(LoadBalancer):
         def score(inst: ModelInstance) -> float:
             iid = inst.instance_id
             current_load = self._loads.get(iid, 0.0)
-            speed = max(self._speed_ewma.get(iid, 1.0), 0.1)  # 最低 0.1 防除零
+            # v4.3: 冷启动默认 0.1 → 新实例前几个请求只收到很少流量
+            speed = max(self._speed_ewma.get(iid, 0.1), 0.1)
             reliability = max(self._reliability_ewma.get(iid, 1.0), 0.01)
 
             numerator = (current_load * w_load) + weight
