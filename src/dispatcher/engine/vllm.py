@@ -8,8 +8,6 @@ vLLM 完全兼容 OpenAI 格式。同时支持 LM Studio 等 OpenAI 兼容后端
 
 from __future__ import annotations
 
-import os
-
 from src.shared.models import EngineAdapter, InferenceRequest, InferenceResponse, ModelInstance, TokenUsage
 
 
@@ -33,8 +31,8 @@ class VLLMAdapter(EngineAdapter):
         url = instance.address.rstrip("/") + "/v1/chat/completions"
         headers: dict = {"Content-Type": "application/json"}
 
-        # 后端 API Key（如 LM Studio 需要 sk-lm-xxx）
-        api_key = os.environ.get("BACKEND_API_KEY", "")
+        # 后端 API Key（优先 instance.api_key, fallback 到全局 BACKEND_API_KEY）
+        api_key = instance.api_key
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 

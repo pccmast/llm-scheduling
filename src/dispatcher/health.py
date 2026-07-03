@@ -2,12 +2,16 @@
 
 定期探测所有已注册实例的健康状态。连续失败达到阈值标记为 UNHEALTHY，
 恢复后自动标记为 HEALTHY。DRAINING 状态的实例跳过检查。
+
+v4 升级:
+- 健康判定从 status < 500 改为 200 <= status < 300
+- 429 (Rate Limit) 触发失败计数但不等于实例死亡
+- API Key 从全局 BACKEND_API_KEY 改为 per-instance api_key
 """
 
 from __future__ import annotations
 
 import asyncio
-import os
 
 import httpx
 
@@ -35,6 +39,7 @@ class HealthChecker:
         self._config = config
         self._failure_counts: dict[str, int] = {}
         self._success_counts: dict[str, int] = {}
+        self._rate_limited: dict[str, bool] = {}  # v4: 跟踪限流状态
         self._stopped = asyncio.Event()
         self._client: httpx.AsyncClient | None = None
 
@@ -42,6 +47,8 @@ class HealthChecker:
         """检查单个实例是否健康。
 
         通过 HTTP GET 请求实例的 health endpoint。
+
+        v4 变更: 200 <= status < 300 才算健康, 429 触发限流标记.
 
         Args:
             instance: 要检查的实例。
@@ -58,15 +65,19 @@ class HealthChecker:
         timeout = self._config.timeout_seconds
         headers: dict[str, str] = {}
 
-        # 后端需要鉴权时携带 API Key（如 LM Studio）
-        api_key = os.environ.get("BACKEND_API_KEY", "")
+        # 后端 API Key（优先 instance.api_key, fallback 到全局 BACKEND_API_KEY）
+        api_key = instance.api_key
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
         try:
             async with httpx.AsyncClient(timeout=timeout, headers=headers, trust_env=False) as client:
                 response = await client.get(url)
-                return response.status_code < 500
+                # v4: 200-299 才算健康, 429 特殊处理
+                if response.status_code == 429:
+                    self._rate_limited[instance.instance_id] = True
+                    return False
+                return 200 <= response.status_code < 300
         except Exception:
             return False
 

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from enum import Enum
 
@@ -49,6 +50,17 @@ class ModelInstance(BaseModel):
     capacity_factor: float = 1.0  # 容量因子（大 GPU > 1.0）
     status: InstanceStatus = InstanceStatus.HEALTHY
     metadata: dict[str, str] = Field(default_factory=dict)
+    # v4: per-instance API Key
+    api_key_env: str = ""
+    # 从哪个环境变量读取 API Key。空字符串 = 不需要鉴权。
+    # 向后兼容: adapter 在 api_key_env 为空时 fallback 到全局 BACKEND_API_KEY.
+
+    @property
+    def api_key(self) -> str:
+        """从环境变量解析 API Key。"""
+        if not self.api_key_env:
+            return os.environ.get("BACKEND_API_KEY", "")
+        return os.environ.get(self.api_key_env, "")
 
 
 class InferenceRequest(BaseModel):

@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-import os
-
 from src.shared.models import EngineAdapter, InferenceRequest, InferenceResponse, ModelInstance, TokenUsage
 
 
@@ -39,8 +37,8 @@ class OllamaAdapter(EngineAdapter):
         url = instance.address.rstrip("/") + "/api/chat"
         headers: dict = {"Content-Type": "application/json"}
 
-        # 后端 API Key（可选）
-        api_key = os.environ.get("BACKEND_API_KEY", "")
+        # 后端 API Key（优先 instance.api_key, fallback 到全局 BACKEND_API_KEY）
+        api_key = instance.api_key
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
