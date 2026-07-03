@@ -37,3 +37,6 @@ benchmark/v2/results/
 
 # Backup config files
 config/*.bak
+
+# Environment variables (local secrets)
+.env
