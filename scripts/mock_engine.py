@@ -461,6 +461,7 @@ def main() -> None:
     parser.add_argument(
         "--engine", choices=["ollama", "vllm", "tgi"], default="ollama", help="模拟的引擎类型（默认: ollama）"
     )
+    parser.add_argument("--reload", action="store_true", help="开发模式: 代码变更时自动重启")
     args = parser.parse_args()
 
     global ENGINE_TYPE, SIMULATED_LATENCY, PORT
@@ -483,7 +484,14 @@ def main() -> None:
     print(f"  - POST http://127.0.0.1:{PORT}/admin/reset")
     print()
 
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=PORT,
+        log_level="info",
+        reload=args.reload,
+        reload_dirs=["scripts"] if args.reload else None,
+    )
 
 
 if __name__ == "__main__":
