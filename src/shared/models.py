@@ -130,6 +130,7 @@ class BalancerWeights(BaseModel):
     speed: float = 1.0         # speed 权重: >1 更偏好快实例
     reliability: float = 1.0   # reliability 权重: >1 更偏好稳定实例
     load: float = 1.0           # load 权重: 0 = 忽略当前负载
+    cooldown_seconds: float = 5.0  # v4.3: 失败后冷却秒数 (0=不启用)
 
 
 class RoutingConfig(BaseModel):

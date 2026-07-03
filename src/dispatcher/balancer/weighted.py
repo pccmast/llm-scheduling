@@ -1,37 +1,52 @@
-"""Module 4: WeightedBalancer — v4.3 稳定评分公式.
+"""Module 4: WeightedBalancer v4.3 — cooldown + 线性权重 + priority.
 
 v3: score = (load + weight) / cap
-v4.3: score = (load*w_load + weight) / (cap * speed_bonus * rel_bonus * priority_bonus)
-      线性权重, 避免指数放大. 冷启动默认 0.3. 支持 priority.
+v4.3: cooldown 冷却期 + 线性权重 + priority 因子
 """
 
 from __future__ import annotations
+
+import time
 
 from src.shared.models import BalancerWeights, InferenceRequest, LoadBalancer, ModelInstance
 
 
 class WeightedBalancer(LoadBalancer):
-    """加权负载均衡 v4.3 — 线性权重 + priority。"""
+    """加权负载均衡 v4.3 — cooldown 冷却期 + 线性权重 + priority。"""
 
     def __init__(self, weights: BalancerWeights | None = None, ewma_alpha: float = 0.3) -> None:
         self._loads: dict[str, float] = {}
         self._speed_ewma: dict[str, float] = {}
         self._reliability_ewma: dict[str, float] = {}
+        self._cooldown_until: dict[str, float] = {}  # v4.3: instance_id → timestamp
         self._alpha: float = ewma_alpha
         self._weights: BalancerWeights = weights or BalancerWeights()
 
     def select(self, candidates: list[ModelInstance], request: InferenceRequest) -> ModelInstance:
         """选择 score 最小的实例。
 
-        v4.3 公式 (线性权重, 避免指数放大):
-          speed_bonus = 1 + w_speed * (speed - 1)
-          rel_bonus   = 1 + w_reliability * (1 - reliability)
-          pri_bonus   = 1 + 0.3 * (10 - priority) / 10
+        v4.3: cooldown 硬过滤 — 冷却中的实例不参与评分,
+        除非全部在冷却中才放宽限制.
 
-          score = (load * w_load + weight) / (cap * speed_bonus * pri_bonus / rel_bonus)
+        公式:
+          speed_bonus = 1 + w_speed * (speed - 1)
+          rel_penalty  = 1 + w_reliability * (1 - reliability)
+          pri_bonus   = 1 + 0.3 * (10 - priority) / 10
+          score = (load * w_load + weight) / (cap * speed_bonus * pri_bonus / rel_penalty)
         """
         if not candidates:
             raise ValueError("candidates must not be empty")
+
+        now = time.monotonic()
+        cooldown_s = self._weights.cooldown_seconds
+
+        # v4.3: 冷却过滤 — 筛掉刚失败的实例
+        if cooldown_s > 0:
+            active = [i for i in candidates
+                      if self._cooldown_until.get(i.instance_id, 0) <= now]
+            if active:
+                candidates = active
+        # 全部冷却 → 不退避, 全部候选
 
         weight = request.estimated_weight
         w_load = self._weights.load
@@ -41,16 +56,11 @@ class WeightedBalancer(LoadBalancer):
         def score(inst: ModelInstance) -> float:
             iid = inst.instance_id
             current_load = self._loads.get(iid, 0.0)
-            # 冷启动默认 0.3 (介于 0.1过于保守和 1.0过于乐观之间)
             speed = max(self._speed_ewma.get(iid, 0.3), 0.1)
             reliability = self._reliability_ewma.get(iid, 1.0)
 
-            # 线性 bonus: w=2 时 2x 速度 → 3x bonus (而非 4x)
             speed_bonus = 1 + w_speed * max(speed - 1.0, 0)
-            # reliability 越低 → penalty 越大
             rel_penalty = 1 + w_reliability * (1 - reliability)
-
-            # priority: 1(高优)→bonus=1.27, 10(低优)→bonus=1.0
             pri_bonus = 1 + 0.3 * (10 - request.priority) / 10
 
             numerator = (current_load * w_load) + weight
@@ -59,21 +69,33 @@ class WeightedBalancer(LoadBalancer):
 
         return min(candidates, key=score)
 
+    def _set_cooldown(self, instance_id: str) -> None:
+        """启动冷却期。"""
+        if self._weights.cooldown_seconds > 0:
+            self._cooldown_until[instance_id] = time.monotonic() + self._weights.cooldown_seconds
+
+    def _clear_cooldown(self, instance_id: str) -> None:
+        """成功 → 清除冷却。"""
+        self._cooldown_until.pop(instance_id, None)
+
     def record_performance(self, instance_id: str, completion_tokens: int, duration_ms: float) -> None:
-        if duration_ms <= 0 or completion_tokens <= 0:
-            return
+        if duration_ms <= 0 or completion_tokens <= 0: return
         new_speed = completion_tokens / duration_ms * 1000
         old = self._speed_ewma.get(instance_id, new_speed)
         self._speed_ewma[instance_id] = self._alpha * new_speed + (1 - self._alpha) * old
+        # 成功 → 取消冷却
+        self._clear_cooldown(instance_id)
 
     def record_failure(self, instance_id: str, penalty: float = 1.0) -> None:
-        """记录失败。penalty=1.0 全惩罚, 0.5 半惩罚 (区分错误类型)。"""
         old = self._reliability_ewma.get(instance_id, 1.0)
         self._reliability_ewma[instance_id] = self._alpha * (1 - penalty) + (1 - self._alpha) * old
+        # 失败 → 进入冷却, 避免短时间内反复重试同一实例
+        self._set_cooldown(instance_id)
 
     def record_success(self, instance_id: str) -> None:
         old = self._reliability_ewma.get(instance_id, 1.0)
         self._reliability_ewma[instance_id] = self._alpha * 1.0 + (1 - self._alpha) * old
+        self._clear_cooldown(instance_id)
 
     def on_request_start(self, instance_id: str, request: InferenceRequest | None = None) -> None:
         delta = request.estimated_weight if request else 0.0
@@ -92,3 +114,7 @@ class WeightedBalancer(LoadBalancer):
 
     def get_reliability(self, instance_id: str) -> float:
         return self._reliability_ewma.get(instance_id, 1.0)
+
+    def is_in_cooldown(self, instance_id: str) -> bool:
+        """检查实例是否在冷却期 (v4.3 新增)."""
+        return self._cooldown_until.get(instance_id, 0) > time.monotonic()
