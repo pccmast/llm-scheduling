@@ -199,6 +199,9 @@ class RoutingProxy:
                     usage.completion_tokens,
                     inference_response.latency_ms,
                 )
+            # v4: 可靠性反馈
+            if hasattr(self._balancer, "record_success"):
+                self._balancer.record_success(instance.instance_id)
 
             root_span.set_attribute("success", True)
             return inference_response
@@ -422,11 +425,14 @@ class RoutingProxy:
         request: InferenceRequest,
         start_time: float,
     ) -> None:
-        """记录失败的请求（熔断器 + 指标）。"""
+        """记录失败的请求（熔断器 + 指标 + balancer 可靠性）。"""
         if instance:
             cb = self._get_cb(instance.instance_id)
             if cb:
                 cb.record_failure()
+            # v4: 可靠性反馈
+            if hasattr(self._balancer, "record_failure"):
+                self._balancer.record_failure(instance.instance_id)
             if self._metrics:
                 self._metrics.record_request(
                     instance.instance_id,

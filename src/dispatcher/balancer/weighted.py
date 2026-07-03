@@ -1,35 +1,38 @@
 """Module 4: WeightedBalancer — 规格书 §4 Module 4 扩展.
 
 v3: score = (current_load + estimated_weight) / capacity_factor
-v4: score = (current_load + estimated_weight) / (capacity_factor * max(speed_ewma, 1.0))
-     加入 EWMA 性能反馈，快实例自动获得更多流量。
+v4: score = (load*w_load + weight) / (cap * speed^w_speed * reliability^w_reliability)
+     性能感知 + 可靠性感知 + 可配置权重
 """
 
 from __future__ import annotations
 
-from src.shared.models import InferenceRequest, LoadBalancer, ModelInstance
+from src.shared.models import BalancerWeights, InferenceRequest, LoadBalancer, ModelInstance
 
 
 class WeightedBalancer(LoadBalancer):
-    """加权负载均衡 v4 — 感知性能差异。"""
+    """加权负载均衡 v4 — 感知性能 + 可靠性差异。"""
 
-    def __init__(self, ewma_alpha: float = 0.3) -> None:
+    def __init__(self, weights: BalancerWeights | None = None, ewma_alpha: float = 0.3) -> None:
         """
         Args:
-            ewma_alpha: EWMA 平滑系数。越大越敏感 (0 完全平滑, 1 只用最新值).
+            weights: 评分权重配置。None 使用默认 (1:1:1).
+            ewma_alpha: EWMA 平滑系数 (0=极平滑, 1=只用最新值).
         """
         self._loads: dict[str, float] = {}
-        self._speed_ewma: dict[str, float] = {}  # v4: 每个实例的 EWMA tok/s
+        self._speed_ewma: dict[str, float] = {}
+        self._reliability_ewma: dict[str, float] = {}  # v4: 1.0=全成功, 0=全失败
         self._alpha: float = ewma_alpha
+        self._weights: BalancerWeights = weights or BalancerWeights()
 
     def select(self, candidates: list[ModelInstance], request: InferenceRequest) -> ModelInstance:
         """选择 score 最小的实例。
 
         v4 公式:
-          score = (current_load + estimated_weight)
-                  / (capacity_factor * max(speed_ewma, 1.0))
+          score = (load * w_load + weight)
+                  / (cap * speed^w_speed * reliability^w_reliability)
 
-        无历史数据时 speed_ewma = 1.0 → 退化为 v3 行为.
+        无历史数据时 speed=1.0, reliability=1.0 → 退化为 v3 行为.
 
         Raises:
             ValueError: candidates 为空。
@@ -38,29 +41,39 @@ class WeightedBalancer(LoadBalancer):
             raise ValueError("candidates must not be empty")
 
         weight = request.estimated_weight
+        w_load = self._weights.load
+        w_speed = self._weights.speed
+        w_reliability = self._weights.reliability
 
         def score(inst: ModelInstance) -> float:
-            current_load = self._loads.get(inst.instance_id, 0.0)
-            speed = max(self._speed_ewma.get(inst.instance_id, 1.0), 1.0)
-            return (current_load + weight) / (inst.capacity_factor * speed)
+            iid = inst.instance_id
+            current_load = self._loads.get(iid, 0.0)
+            speed = max(self._speed_ewma.get(iid, 1.0), 0.1)  # 最低 0.1 防除零
+            reliability = max(self._reliability_ewma.get(iid, 1.0), 0.01)
+
+            numerator = (current_load * w_load) + weight
+            denominator = inst.capacity_factor * (speed ** w_speed) * (reliability ** w_reliability)
+            return numerator / max(denominator, 0.001)
 
         return min(candidates, key=score)
 
     def record_performance(self, instance_id: str, completion_tokens: int, duration_ms: float) -> None:
-        """proxy 完成请求后回写实测性能 (v4 新增).
-
-        EWMA 公式: speed = alpha * new + (1 - alpha) * old
-
-        Args:
-            instance_id: 实例 ID.
-            completion_tokens: 实际生成的 token 数.
-            duration_ms: 请求耗时 (毫秒).
-        """
-        if duration_ms <= 0:
+        """proxy 成功完成请求 → 回写速度 (v4)."""
+        if duration_ms <= 0 or completion_tokens <= 0:
             return
-        new_speed = completion_tokens / duration_ms * 1000  # tokens/s
+        new_speed = completion_tokens / duration_ms * 1000
         old = self._speed_ewma.get(instance_id, new_speed)
         self._speed_ewma[instance_id] = self._alpha * new_speed + (1 - self._alpha) * old
+
+    def record_failure(self, instance_id: str) -> None:
+        """proxy 请求失败 → 降低可靠性 (v4 新增)."""
+        old = self._reliability_ewma.get(instance_id, 1.0)
+        self._reliability_ewma[instance_id] = self._alpha * 0.0 + (1 - self._alpha) * old
+
+    def record_success(self, instance_id: str) -> None:
+        """proxy 请求成功 → 提升可靠性 (v4 新增)."""
+        old = self._reliability_ewma.get(instance_id, 1.0)
+        self._reliability_ewma[instance_id] = self._alpha * 1.0 + (1 - self._alpha) * old
 
     def on_request_start(self, instance_id: str, request: InferenceRequest | None = None) -> None:
         delta = request.estimated_weight if request else 0.0
@@ -75,5 +88,7 @@ class WeightedBalancer(LoadBalancer):
         return self._loads.get(instance_id, 0.0)
 
     def get_speed(self, instance_id: str) -> float:
-        """获取实例的 EWMA 速度 (v4 新增)."""
         return self._speed_ewma.get(instance_id, 1.0)
+
+    def get_reliability(self, instance_id: str) -> float:
+        return self._reliability_ewma.get(instance_id, 1.0)

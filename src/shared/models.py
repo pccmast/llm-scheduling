@@ -121,6 +121,17 @@ class ScaleDecision(BaseModel):
     reason: str = ""
 
 
+class BalancerWeights(BaseModel):
+    """负载均衡的评分权重配置 (v4 新增)。
+
+    用于动态调优 select() 公式中各因子的影响力。
+    """
+
+    speed: float = 1.0         # speed 权重: >1 更偏好快实例
+    reliability: float = 1.0   # reliability 权重: >1 更偏好稳定实例
+    load: float = 1.0           # load 权重: 0 = 忽略当前负载
+
+
 class ScaleConfig(BaseModel):
     """自动扩缩容的配置参数。
 
@@ -161,6 +172,7 @@ class HealthCheckConfig(BaseModel):
     timeout_seconds: float = 5.0
     unhealthy_threshold: int = 3  # 连续失败 N 次标记为 unhealthy
     healthy_threshold: int = 1  # 成功 1 次恢复为 healthy
+    deep_check_interval: int = 0  # v4: 深检周期 (0=不启用), 每N次轻检后做1次推理心跳
 
 
 # ── 异常类型 ───────────────────────────────────────────────

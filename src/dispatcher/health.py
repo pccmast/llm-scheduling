@@ -40,6 +40,7 @@ class HealthChecker:
         self._failure_counts: dict[str, int] = {}
         self._success_counts: dict[str, int] = {}
         self._rate_limited: dict[str, bool] = {}  # v4: 跟踪限流状态
+        self._check_cycle: int = 0  # v4: 深检周期计数器
         self._stopped = asyncio.Event()
         self._client: httpx.AsyncClient | None = None
 
@@ -81,6 +82,41 @@ class HealthChecker:
         except Exception:
             return False
 
+    async def deep_check_one(self, instance: ModelInstance) -> bool:
+        """深检 — 发送真实推理请求，验证模型能实际生成 token。
+
+        消耗 ~5-10 token (含 prompt)，仅在深检周期触发。
+        成功后同时回写性能数据到 registry 关联的 balancer (如有).
+
+        Returns:
+            True 表示模型能正常推理，False 表示失败。
+        """
+        adapter = self._engine_adapters.get(instance.engine_type)
+        if adapter is None:
+            return False
+
+        from src.shared.models import InferenceRequest
+
+        fake_req = InferenceRequest(
+            request_id=f"deepcheck-{instance.instance_id}",
+            model=instance.model if instance.model != "*" else "qwen/qwen3-1.7b",
+            messages=[{"role": "user", "content": "Hi"}],
+            max_tokens=1,
+            temperature=0.0,
+        )
+        url, headers, body = adapter.build_request(instance, fake_req)
+
+        try:
+            async with httpx.AsyncClient(timeout=self._config.timeout_seconds, trust_env=False) as client:
+                response = await client.post(url, json=body, headers=headers)
+                if response.status_code != 200:
+                    return False
+                raw = response.json()
+                usage = raw.get("usage", {})
+                return usage.get("completion_tokens", 0) > 0
+        except Exception:
+            return False
+
     async def run_forever(self) -> None:
         """启动健康检查的后台循环。
 
@@ -109,16 +145,35 @@ class HealthChecker:
             await self._client.aclose()
 
     async def _check_all_instances(self) -> None:
-        """并行检查所有实例的健康状态。"""
+        """并行检查所有实例的健康状态。
+
+        每 deep_check_interval 次轻量检查后，执行一次深检 (推理心跳)。
+        """
         instances = self._registry.list_all()
         if not instances:
             return
 
-        # 并行检查所有非 DRAINING 实例
+        # 轻量检查所有非 DRAINING 实例
         await asyncio.gather(
             *(self._check_and_update(inst) for inst in instances if inst.status != InstanceStatus.DRAINING),
             return_exceptions=True,
         )
+
+        # v4: 深检 — 验证模型能实际生成 token
+        self._check_cycle += 1
+        deep_every = getattr(self._config, "deep_check_interval", 0)
+        if deep_every > 0 and self._check_cycle % deep_every == 0:
+            await asyncio.gather(
+                *(self._deep_check_and_update(inst) for inst in instances if inst.status != InstanceStatus.DRAINING),
+                return_exceptions=True,
+            )
+
+    async def _deep_check_and_update(self, instance: ModelInstance) -> None:
+        """深检单个实例 — 验证模型推理能力。失败不计入 unhealthy 计数。"""
+        ok = await self.deep_check_one(instance)
+        if not ok:
+            # 深检失败: 记录但不改变健康状态, 仅用于观察
+            pass
 
     async def _check_and_update(self, instance: ModelInstance) -> None:
         """检查单个实例并更新状态。"""

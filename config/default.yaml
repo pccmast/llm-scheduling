@@ -7,6 +7,10 @@ instances: []
 
 load_balancer:
   strategy: "weighted"   # "round_robin" | "least_conn" | "weighted"
+  weights:               # v4: weighted 策略的评分权重
+    speed: 1.0           # >1 更偏好快实例
+    reliability: 1.0     # >1 更偏好稳定实例
+    load: 1.0            # 0=忽略当前负载
 
 queue:
   max_size: 100
@@ -36,3 +40,4 @@ health_check:
   interval_seconds: 10.0
   timeout_seconds: 5.0
   unhealthy_threshold: 3
+  deep_check_interval: 30   # v4: 推理心跳 (每30次轻检做1次, 0=不启用)
