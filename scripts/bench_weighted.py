@@ -93,9 +93,9 @@ speeds_after = {iid: info.get("speed_tok_s", 0) for iid, info in debug.get("inst
 if len(speeds_after) >= 2:
     sorted_ids = sorted(speeds_after, key=speeds_after.get, reverse=True)
     faster, slower = sorted_ids[0], sorted_ids[1]
-    print(f"\n  ⚡ 更快: {faster} ({speeds_after[faster]:.1f} tok/s)")
-    print(f"  🐢 较慢: {slower} ({speeds_after[slower]:.1f} tok/s)")
+    print(f"\n  >> 更快: {faster} ({speeds_after[faster]:.1f} tok/s)")
+    print(f"  >> 较慢: {slower} ({speeds_after[slower]:.1f} tok/s)")
     if speeds_after[faster] / max(speeds_after[slower], 0.1) > 1.1:
-        print(f"  ✅ 速度差异 > 10%, 调度器将会偏向快实例 (speed_bonus 生效)")
+        print(f"  PASS: 速度差异 > 10%, 调度器将会偏向快实例 (speed_bonus 生效)")
     else:
-        print(f"  ℹ️  速度差异 < 10%, 调度器视为相近 (均衡分配)")
+        print(f"  INFO: 速度差异 < 10%, 调度器视为相近 (均衡分配)")
