@@ -209,7 +209,9 @@ for workers, label in [(4, "4并发"), (6, "6并发")]:
     t_dual = time.time() - t0
     tp_dual = workers / t_dual
 
-    print(f"  {label}: 单模型 {tp_single:.1f} rps ({t_single:.1f}s)  |  双模型 {tp_dual:.1f} rps ({t_dual:.1f}s)  |  差异 {(tp_dual/tp_single-1)*100:+.0f}%")
+    diff_pct = (tp_dual/tp_single-1)*100
+    print(f"  {label}: 单模型 {tp_single:.1f} rps ({t_single:.1f}s)  "
+          f"|  双模型 {tp_dual:.1f} rps ({t_dual:.1f}s)  |  差异 {diff_pct:+.0f}%")
 
     if tp_dual > tp_single * 0.7:
         ok(f"{label} 双模型吞吐接近单模型 (调度器未成为瓶颈)")
@@ -225,4 +227,4 @@ if FAIL:
     print(f"             {FAIL} 失败")
     sys.exit(1)
 else:
-    print(f"  \033[32m调度器成功利用两块 GPU 显存进行负载均衡\033[0m")
+    print("  \033[32m调度器成功利用两块 GPU 显存进行负载均衡\033[0m")

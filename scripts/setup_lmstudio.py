@@ -146,7 +146,7 @@ def setup_instances() -> None:
             print(f"  ❌ {iid:>25s} 失败: {code} {data.get('detail','')})")
 
     # ── 3. 验证 ──
-    print(f"\n[验证] 当前注册表:")
+    print("\n[验证] 当前注册表:")
     try:
         instances = api_get("/admin/instances", base=DISPATCHER_BASE)
         for inst in instances:
@@ -155,7 +155,7 @@ def setup_instances() -> None:
     except Exception as e:
         print(f"  验证失败: {e}")
 
-    print(f"\n[完成] run 'uv run python scripts/bench_dual_model.py' to test.")
+    print("\n[完成] run 'uv run python scripts/bench_dual_model.py' to test.")
 
 
 if __name__ == "__main__":

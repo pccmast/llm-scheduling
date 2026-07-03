@@ -5,7 +5,11 @@
 用法: uv run python scripts/bench_weighted.py
 """
 
-import json, sys, time, urllib.request, statistics
+import json
+import statistics
+import sys
+import time
+import urllib.request
 
 DISPATCHER = "http://127.0.0.1:9090"
 LM_STUDIO = "http://127.0.0.1:14344"
@@ -96,6 +100,6 @@ if len(speeds_after) >= 2:
     print(f"\n  >> 更快: {faster} ({speeds_after[faster]:.1f} tok/s)")
     print(f"  >> 较慢: {slower} ({speeds_after[slower]:.1f} tok/s)")
     if speeds_after[faster] / max(speeds_after[slower], 0.1) > 1.1:
-        print(f"  PASS: 速度差异 > 10%, 调度器将会偏向快实例 (speed_bonus 生效)")
+        print("  PASS: 速度差异 > 10%, 调度器将会偏向快实例 (speed_bonus 生效)")
     else:
-        print(f"  INFO: 速度差异 < 10%, 调度器视为相近 (均衡分配)")
+        print("  INFO: 速度差异 < 10%, 调度器视为相近 (均衡分配)")

@@ -1,5 +1,8 @@
 """面试向压测 — LM Studio 真实大模型版"""
-import json, time, urllib.request, statistics
+import json
+import statistics
+import time
+import urllib.request
 
 BASE = "http://127.0.0.1:9090"
 LM = "http://127.0.0.1:14344"
@@ -102,6 +105,7 @@ print("=" * 60)
 
 import concurrent.futures
 
+
 def do_direct():
     return infer_direct(tokens=10)
 
@@ -115,13 +119,13 @@ for workers, label in [(1, "串行"), (3, "3并发"), (5, "5并发")]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
         list(ex.map(lambda _: do_direct(), range(workers)))
     t_direct = time.time() - t0
-    
+
     # 经调度器
     t0 = time.time()
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
         list(ex.map(lambda _: do_via(), range(workers)))
     t_via = time.time() - t0
-    
+
     tp_direct = workers / t_direct
     tp_via = workers / t_via
     print(f"  {label:>4}:  直连 {t_direct:.1f}s ({tp_direct:.1f} rps)  |  调度器 {t_via:.1f}s ({tp_via:.1f} rps)  |  差异 {(tp_via/tp_direct-1)*100:+.0f}%")

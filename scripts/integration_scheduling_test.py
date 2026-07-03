@@ -3,12 +3,11 @@
 前提：LM Studio 已加载两个 qwen 实例
 运行：uv run python scripts/integration_scheduling_test.py
 """
-import asyncio
 import json
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 BASE = "http://127.0.0.1:9090"
 AUTH = "Bearer sk-lm-cR1GVaJg:W0pVeY0MwNSkiaJY3llG"
@@ -69,7 +68,7 @@ def setup():
         print(f"    OK: {data['instance_id']}")
     except urllib.error.HTTPError as e:
         if e.code == 409:
-            print(f"    qwen-A already exists")
+            print("    qwen-A already exists")
         else:
             raise
 
@@ -81,7 +80,7 @@ def setup():
         print(f"    OK: {data['instance_id']}")
     except urllib.error.HTTPError as e:
         if e.code == 409:
-            print(f"    qwen-B already exists")
+            print("    qwen-B already exists")
         else:
             raise
 
@@ -249,4 +248,4 @@ if failed:
     print(f"           {failed} FAILED")
     sys.exit(1)
 else:
-    print(f"  \033[32mAll tests passed!\033[0m")
+    print("  \033[32mAll tests passed!\033[0m")

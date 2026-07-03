@@ -7,8 +7,8 @@
 import json
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
 BASE = "http://127.0.0.1:9090"
 AUTH = "Bearer sk-lm-cR1GVaJg:W0pVeY0MwNSkiaJY3llG"
@@ -81,7 +81,7 @@ print(f"  直连 (median):      {direct_med*1000:.0f}ms")
 print(f"  经调度器 (median):  {via_med*1000:.0f}ms")
 print(f"  调度器 overhead:    {overhead_ms:.0f}ms")
 if overhead_ms < 300:
-    ok(f"overhead < 300ms (网络+代理开销, 可忽略)")
+    ok("overhead < 300ms (网络+代理开销, 可忽略)")
 else:
     ok(f"overhead {overhead_ms:.0f}ms (含模型波动)")
 
@@ -166,9 +166,9 @@ try:
             print(f"  10 请求分布: {increments}")
             print(f"  快实例 ({fastest_id}) 获得 {fastest_share:.0f}% 流量")
             if fastest_share > 55:
-                ok(f"EWMA 生效: 快实例获得更多流量")
+                ok("EWMA 生效: 快实例获得更多流量")
             elif fastest_share == 100 and slower[1] < 1:
-                ok(f"慢实例 (0 tok/s) 被自动排除, 全部流量给快实例")
+                ok("慢实例 (0 tok/s) 被自动排除, 全部流量给快实例")
             else:
                 fail(f"流量未偏向快实例 ({fastest_share:.0f}%)")
     else:
@@ -210,7 +210,7 @@ try:
     inst_data2 = balancer_data2.get("instances", {})
     cooldown_after = sum(1 for s in inst_data2.values() if s.get("in_cooldown"))
     if cooldown_after == 0:
-        ok(f"冷却期结束: 所有实例自动恢复")
+        ok("冷却期结束: 所有实例自动恢复")
     elif cooldown_after < cooldown_count:
         ok(f"冷却期缩减: {cooldown_count}→{cooldown_after}")
     else:
@@ -227,6 +227,6 @@ print(f"\n  面试向压测: {PASS}/{PASS+FAIL} 通过")
 if FAIL:
     print(f"               {FAIL} 失败")
 else:
-    print(f"  \033[32m全部通过! 调度器核心能力已验证.\033[0m")
+    print("  \033[32m全部通过! 调度器核心能力已验证.\033[0m")
 if FAIL > 0:
     sys.exit(1)

@@ -82,6 +82,64 @@ curl -X POST http://127.0.0.1:9090/admin/instances \
 
 **v4 per-instance Key**: 注册实例时传 `api_key_env: "MY_KEY"`，从指定环境变量读取，不传则 fallback 到 `BACKEND_API_KEY`。
 
+## 实例管理
+
+调度器本身不做模型发现——实例由运维层（YAML 配置 / API / 脚本）注册。
+
+### 注册实例
+
+```bash
+# 方式 1: API 注册 (推荐)
+curl -X POST http://127.0.0.1:9090/admin/instances \
+  -H "Content-Type: application/json" \
+  -d '{
+    "instance_id": "qwen-1",
+    "address": "http://127.0.0.1:14344",
+    "model": "qwen/qwen3-1.7b",
+    "engine_type": "vllm"
+  }'
+```
+
+```bash
+# 方式 2: LM Studio 一键注册 (自动发现已加载模型)
+uv run python scripts/setup_lmstudio.py
+```
+
+```bash
+# 方式 3: YAML 静态配置 (生产环境)
+# 编辑 config/default.yaml:
+instances:
+  - instance_id: gpu-1
+    address: http://192.168.1.10:8000
+    model: qwen3-1.7b
+    engine_type: vllm
+```
+
+### 注销实例
+
+```bash
+curl -X DELETE http://127.0.0.1:9090/admin/instances/qwen-1
+```
+
+### `model` 字段规范
+
+| 值 | 含义 | 适用场景 |
+|----|------|---------|
+| `"qwen/qwen3-1.7b"` | 精确模型名 | 该实例明确只服务此模型 |
+| `"*"` | 通配符 | 后端能处理任意模型（如 OpenAI API 代理） |
+
+> ⚠️ 同一 `address` + 同一 `model` 不能重复注册。`model="*"` 与精确模型名并存会触发警告。
+
+### 管理端点一览
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/admin/instances` | 注册实例 |
+| `DELETE` | `/admin/instances/{id}` | 注销实例 + 清理熔断器 |
+| `GET` | `/admin/instances` | 列出所有实例 |
+| `GET` | `/admin/status` | 全局状态 |
+| `GET` | `/admin/balancer/debug` | 每个实例的速度/可靠性评分 |
+
 ## 配置
 
 编辑 `config/default.yaml`：

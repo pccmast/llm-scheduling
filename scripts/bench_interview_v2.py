@@ -206,9 +206,9 @@ async def main():
             print(f"  样本数: 直连={len(direct_lats)}, 经调度器={len(via_lats)}")
 
             if overhead_med < 20:
-                ok(f"调度开销 < 20ms (仅 HTTP 代理跳转, 可忽略)")
+                ok("调度开销 < 20ms (仅 HTTP 代理跳转, 可忽略)")
             elif overhead_med < 50:
-                ok(f"调度开销 < 50ms (正常代理开销)")
+                ok("调度开销 < 50ms (正常代理开销)")
             else:
                 ok(f"调度开销 {overhead_med:.0f}ms")
         else:
@@ -269,8 +269,8 @@ async def main():
         print(f"  {CYAN}overhead 占比: {overhead_pct:.1f}% (相对推理延迟){RESET}")
         print(f"  {CYAN}若 GPU 推理 200ms: overhead = {overhead_med:.0f}ms / 200ms = {overhead_med/2:.0f}%{RESET}")
         if overhead_med < 20:
-            ok(f"调度开销可忽略 (远小于推理耗时)")
-        
+            ok("调度开销可忽略 (远小于推理耗时)")
+
         # 串行 vs 并发
         info("串行 20 请求 → 经调度器 (并发对比)...")
         t0 = time.perf_counter()
@@ -289,9 +289,9 @@ async def main():
         speedup = throughput_disp / tp_serial if tp_serial > 0 else 0
         print(f"  {CYAN}并发加速比: {speedup:.1f}x{RESET}")
         if speedup > 1.5:
-            ok(f"多实例并发显著提升吞吐")
+            ok("多实例并发显著提升吞吐")
         else:
-            ok(f"HTTP 代理 2 跳 + mock 单线程限制, 真实 GPU 场景提升更明显")
+            ok("HTTP 代理 2 跳 + mock 单线程限制, 真实 GPU 场景提升更明显")
 
         # ════════════════════════════════════════════════════════
         # 场景 3: 故障转移 — 注入故障 → 自动切换到健康实例
@@ -356,7 +356,7 @@ async def main():
 
         print(f"  恢复后: {recover_ok}/10 成功, 路由: {recover_routes}")
         if recover_ok >= 8 and len(recover_routes) >= 2:
-            ok(f"自愈完成: 双实例流量恢复正常")
+            ok("自愈完成: 双实例流量恢复正常")
         else:
             ok(f"恢复中: {recover_ok}/10, 路由 {recover_routes}")
 
@@ -397,9 +397,9 @@ async def main():
             if 30 <= share_a <= 70 and 30 <= share_b <= 70:
                 ok(f"负载均衡生效: 流量基本均匀 ({abs(share_a-50):.0f}% 偏差)")
             elif share_a > 15 and share_b > 15:
-                ok(f"双实例均有流量, 偏差在可接受范围")
+                ok("双实例均有流量, 偏差在可接受范围")
             else:
-                info(f"注意: mock 单线程处理高并发时可能出现排队, 不影响功能正确性")
+                info("注意: mock 单线程处理高并发时可能出现排队, 不影响功能正确性")
 
     # ── 清理 ──
     print(f"\n{BOLD}{'='*60}{RESET}")
