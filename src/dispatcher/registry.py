@@ -64,16 +64,23 @@ class InstanceRegistry:
     def list_by_model(self, model: str) -> list[ModelInstance]:
         """返回支持指定模型的所有健康实例。
 
+        路由规则：
+        - model 精确匹配的实例 → 优先级路由
+        - model="*" 的通配符实例 → 可处理任意模型（如 LM Studio 多模型后端）
+        - 两者同时存在时，均返回给 balancer 做负载均衡
+
         Args:
             model: 模型名称。
 
         Returns:
-            状态为 HEALTHY 且 model 匹配的实例列表。
-            如果没有匹配实例，返回空列表。
+            HEALTHY 状态的候选实例列表。无匹配时返回空列表。
         """
-        return [
-            inst for inst in self._instances.values() if inst.model == model and inst.status == InstanceStatus.HEALTHY
+        candidates = [
+            inst for inst in self._instances.values()
+            if (inst.model == model or inst.model == "*")
+            and inst.status == InstanceStatus.HEALTHY
         ]
+        return candidates
 
     def update_status(self, instance_id: str, status: InstanceStatus) -> None:
         """更新实例状态。

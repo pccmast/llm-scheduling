@@ -123,6 +123,43 @@ class TestListByModel:
         registry.register(i1)
         assert registry.list_by_model("llama-3") == []
 
+    def test_wildcard_matches_any_model(self, registry: InstanceRegistry) -> None:
+        """model='*' 的通配符实例匹配任意模型请求。"""
+        wild = ModelInstance(
+            instance_id="wild", address="http://a:8000", model="*",
+            engine_type="vllm", status=InstanceStatus.HEALTHY,
+        )
+        registry.register(wild)
+        assert len(registry.list_by_model("gpt-4o")) == 1
+        assert len(registry.list_by_model("llama-3")) == 1
+        assert len(registry.list_by_model("unknown")) == 1
+
+    def test_wildcard_and_exact_both_returned(self, registry: InstanceRegistry) -> None:
+        """精确匹配 + 通配符实例同时返回给 balancer。"""
+        exact = ModelInstance(
+            instance_id="exact", address="http://a:8000", model="gpt-4o",
+            engine_type="vllm", status=InstanceStatus.HEALTHY,
+        )
+        wild = ModelInstance(
+            instance_id="wild", address="http://b:8000", model="*",
+            engine_type="vllm", status=InstanceStatus.HEALTHY,
+        )
+        registry.register(exact)
+        registry.register(wild)
+        result = registry.list_by_model("gpt-4o")
+        assert len(result) == 2
+        ids = {i.instance_id for i in result}
+        assert ids == {"exact", "wild"}
+
+    def test_unhealthy_wildcard_excluded(self, registry: InstanceRegistry) -> None:
+        """UNHEALTHY 通配符实例不出现在结果中。"""
+        wild = ModelInstance(
+            instance_id="wild", address="http://a:8000", model="*",
+            engine_type="vllm", status=InstanceStatus.UNHEALTHY,
+        )
+        registry.register(wild)
+        assert registry.list_by_model("gpt-4o") == []
+
 
 class TestStatusUpdate:
     """实例状态更新测试。"""

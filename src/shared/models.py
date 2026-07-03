@@ -43,7 +43,7 @@ class ModelInstance(BaseModel):
 
     instance_id: str
     address: str  # "http://gpu-server-1:8000"
-    model: str  # "llama-3-8b" | "gpt-4o-mini"
+    model: str  # 模型名, "*" 表示通配符(可处理任意模型, 如 LM Studio 多模型后端)
     engine_type: str  # "ollama" | "vllm" | "tgi"
     max_concurrent: int = 10  # 最大并发请求数
     capacity_factor: float = 1.0  # 容量因子（大 GPU > 1.0）
