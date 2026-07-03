@@ -10,7 +10,7 @@ import time
 import urllib.request
 import urllib.error
 
-BASE = "http://localhost:9090"
+BASE = "http://127.0.0.1:9090"
 AUTH = "Bearer sk-lm-cR1GVaJg:W0pVeY0MwNSkiaJY3llG"
 PASS = 0
 FAIL = 0

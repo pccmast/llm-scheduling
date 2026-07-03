@@ -1,7 +1,7 @@
 """真实后端集成测试 — LM Studio qwen3-1.7b 端到端验证。"""
 import json, sys, time, urllib.request, urllib.error
 
-BASE = "http://localhost:9090"
+BASE = "http://127.0.0.1:9090"
 LM_STUDIO = "http://127.0.0.1:14344"
 MODEL = "qwen/qwen3-1.7b"
 

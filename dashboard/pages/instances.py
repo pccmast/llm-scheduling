@@ -2,7 +2,7 @@
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:9090"
+API_BASE = "http://127.0.0.1:9090"
 st.title("🖥️ 实例详情")
 
 try:

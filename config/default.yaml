@@ -43,7 +43,7 @@ auto_scaler:
   cooldown_seconds: 60
 
 health_check:
-  interval_seconds: 10.0
+  interval_seconds: 30.0
   timeout_seconds: 5.0
   unhealthy_threshold: 3
-  deep_check_interval: 30   # v4: 推理心跳 (每30次轻检做1次, 0=不启用)
+  deep_check_interval: 0    # 关深检, 避免干扰压测

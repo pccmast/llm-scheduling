@@ -5,7 +5,7 @@
     uv run locust -f benchmark/v2/locust/locustfile_v2.py --host=http://localhost:14344
 
     # 通过 Dispatcher (先注册实例)
-    uv run locust -f benchmark/v2/locust/locustfile_v2.py --host=http://localhost:9090
+    uv run locust -f benchmark/v2/locust/locustfile_v2.py --host=http://127.0.0.1:9090
 
 环境变量 (优先级高于默认值):
     BACKEND_API_KEY  -- 后端 API Key (默认 sk-lm-xxx)

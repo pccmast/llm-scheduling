@@ -39,13 +39,13 @@ cp .env.example .env
 uv run uvicorn src.dispatcher.main:create_app --factory --port 9090
 
 # 3. 注册 LM Studio 实例 (通配符, 可处理任意模型)
-curl -X POST http://localhost:9090/admin/instances \
+curl -X POST http://127.0.0.1:9090/admin/instances \
   -H "Content-Type: application/json" \
   -d '{"instance_id":"qwen-A","address":"http://127.0.0.1:14344",
        "model":"*","engine_type":"vllm","capacity_factor":1.5}'
 
 # 4. 发送推理请求
-curl -X POST http://localhost:9090/v1/chat/completions \
+curl -X POST http://127.0.0.1:9090/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"qwen/qwen3-1.7b","messages":[{"role":"user","content":"你好"}]}'
 ```
@@ -56,7 +56,7 @@ curl -X POST http://localhost:9090/v1/chat/completions \
 uv run python scripts/mock_engine.py --port 8001
 uv run uvicorn src.dispatcher.main:create_app --factory --port 9090
 
-curl -X POST http://localhost:9090/admin/instances \
+curl -X POST http://127.0.0.1:9090/admin/instances \
   -d '{"instance_id":"mock-1","address":"http://localhost:8001","model":"test-model","engine_type":"ollama"}'
 ```
 
@@ -160,7 +160,7 @@ uv run python scripts/integration_scheduling_test.py   # 双模型调度 7 项�
 
 # 压测
 uv run locust -f benchmark/v2/locust/locustfile_v2.py \
-  --host=http://localhost:9090 --headless --users=10 --run-time=30s
+  --host=http://127.0.0.1:9090 --headless --users=10 --run-time=30s
 ```
 
 ## Docker

@@ -2,10 +2,10 @@
 
 
     #  mock 
-    uv run locust -f benchmark/locustfile.py --host=http://localhost:9090 --users=50 --spawn-rate=10 --run-time=2m --headless
+    uv run locust -f benchmark/locustfile.py --host=http://127.0.0.1:9090 --users=50 --spawn-rate=10 --run-time=2m --headless
 
     # 
-    uv run locust -f benchmark/locustfile.py --host=http://localhost:9090 --tags=baseline --users=50 --spawn-rate=10 --run-time=2m --headless
+    uv run locust -f benchmark/locustfile.py --host=http://127.0.0.1:9090 --tags=baseline --users=50 --spawn-rate=10 --run-time=2m --headless
 
 
     BALANCER_STRATEGY: 
