@@ -21,18 +21,83 @@ class InstanceRegistry:
         """初始化空的注册表。"""
         self._instances: dict[str, ModelInstance] = {}
 
-    def register(self, instance: ModelInstance) -> None:
-        """注册一个新实例。
+    def register(self, instance: ModelInstance) -> list[str]:
+        """注册一个新实例，返回校验警告列表。
+
+        校验规则:
+          1. 同 address + 同 model 的重复注册 → 错误
+          2. model="*" 与同一 address 的精确 model 共存 → 警告
+          3. 多个 "*" 实例指向同一 address → 警告 (冗余)
 
         Args:
             instance: 要注册的实例。instance_id 必须唯一。
 
+        Returns:
+            校验警告消息列表 (空列表 = 无警告)。
+
         Raises:
-            ValueError: instance_id 已存在时抛出。
+            ValueError: instance_id 已存在 / 重复注册时抛出。
         """
         if instance.instance_id in self._instances:
             raise ValueError(f"Instance '{instance.instance_id}' is already registered")
+
+        warnings = self._validate_registration(instance)
         self._instances[instance.instance_id] = instance
+        return warnings
+
+    def _validate_registration(self, instance: ModelInstance) -> list[str]:
+        """校验新实例与已有实例是否冲突，返回警告列表。"""
+        warnings: list[str] = []
+
+        # 规则 1: 同 address + 同 model = 重复注册
+        for existing in self._instances.values():
+            if existing.address == instance.address and existing.model == instance.model:
+                raise ValueError(
+                    f"Instance with address='{instance.address}' "
+                    f"and model='{instance.model}' already registered as '{existing.instance_id}'. "
+                    f"To add another instance for the same model, use a different instance_id "
+                    f"(e.g., 'gpu-2') or different address (e.g., another GPU server)."
+                )
+
+        # 规则 2: model="*" 和同一 address 的精确 model 共存 → 造成路由歧义
+        if instance.model == "*":
+            exact_on_same_addr = [
+                e.instance_id for e in self._instances.values()
+                if e.address == instance.address and e.model != "*"
+            ]
+            if exact_on_same_addr:
+                warnings.append(
+                    f"model='*' on address='{instance.address}' conflicts with existing exact-model "
+                    f"instances: {exact_on_same_addr}. "
+                    f"Use exact model names for unambiguous routing."
+                )
+        else:
+            # 规则 3: 注册精确 model 但已有 "*" 实例在相同 address 上
+            wildcard_on_same_addr = [
+                e.instance_id for e in self._instances.values()
+                if e.address == instance.address and e.model == "*"
+            ]
+            if wildcard_on_same_addr:
+                warnings.append(
+                    f"Existing wildcard instance(s) {wildcard_on_same_addr} on same address "
+                    f"'{instance.address}' will also match requests for model='{instance.model}'. "
+                    f"Consider using exact model names for all instances."
+                )
+
+        # 规则 4: 多个 "*" 实例指向同一 address = 伪冗余
+        wildcards_same_addr = [
+            e.instance_id for e in self._instances.values()
+            if e.address == instance.address and e.model == "*"
+        ]
+        if instance.model == "*" and len(wildcards_same_addr) >= 1:
+            warnings.append(
+                f"Multiple wildcard instances ({wildcards_same_addr + [instance.instance_id]}) "
+                f"point to the same address '{instance.address}'. "
+                f"This creates pseudo-redundancy — one physical backend appears as multiple. "
+                f"Use exact model names or different addresses for real redundancy."
+            )
+
+        return warnings
 
     def deregister(self, instance_id: str) -> None:
         """注销一个实例。

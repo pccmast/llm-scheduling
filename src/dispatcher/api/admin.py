@@ -14,8 +14,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from src.dispatcher.middleware import verify_admin_access
+from src.shared.logging import get_logger
 from src.shared.models import ModelInstance
 
+logger = get_logger(__name__)
 admin_router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin_access)])
 
 
@@ -24,7 +26,14 @@ admin_router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin_acc
 
 @admin_router.post("/instances")
 async def register_instance(request: Request) -> dict:
-    """注册一个新的推理引擎实例。"""
+    """注册一个新的推理引擎实例。
+
+    注册规范:
+      - model 字段应使用后端实际提供的模型名 (如 "qwen/qwen3-1.7b")
+      - model="*" 仅用于能处理任意模型的后端 (如 OpenAI API 代理)
+      - 同一 address + 同一 model 的重复注册会被拒绝
+      - 同一 address 上 model="*" 与精确 model 共存会触发警告
+    """
     registry = request.app.state.registry
     try:
         body = await request.json()
@@ -35,10 +44,18 @@ async def register_instance(request: Request) -> dict:
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid instance data: {e}")
     try:
-        registry.register(instance)
+        warnings = registry.register(instance)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return {"status": "ok", "instance_id": instance.instance_id}
+
+    # 记录校验警告
+    for w in warnings:
+        logger.warning("registration_warning", instance_id=instance.instance_id, warning=w)
+
+    response = {"status": "ok", "instance_id": instance.instance_id}
+    if warnings:
+        response["warnings"] = warnings
+    return response
 
 
 @admin_router.delete("/instances/{instance_id}")
