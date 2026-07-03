@@ -40,3 +40,4 @@ config/*.bak
 
 # Environment variables (local secrets)
 .env
+bench_results*

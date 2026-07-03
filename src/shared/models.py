@@ -23,6 +23,13 @@ class InstanceStatus(str, Enum):
     DRAINING = "draining"  # 缩容中，不再接收新请求
 
 
+class InstanceTier(str, Enum):
+    """实例层级 — 决定路由优先级。"""
+
+    LOCAL = "local"    # 本地 GPU，优先使用
+    REMOTE = "remote"  # 远程 API，兜底/按成本
+
+
 # ── 核心数据模型 ───────────────────────────────────────────
 
 
@@ -54,6 +61,8 @@ class ModelInstance(BaseModel):
     api_key_env: str = ""
     # 从哪个环境变量读取 API Key。空字符串 = 不需要鉴权。
     # 向后兼容: adapter 在 api_key_env 为空时 fallback 到全局 BACKEND_API_KEY.
+    tier: InstanceTier = InstanceTier.LOCAL
+    # LOCAL = 本地优先, REMOTE = 远程兜底. list_by_model() 按此排序.
 
     @property
     def api_key(self) -> str:

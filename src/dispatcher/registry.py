@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from src.shared.models import InstanceStatus, ModelInstance
+from src.shared.models import InstanceStatus, InstanceTier, ModelInstance
 
 
 class InstanceRegistry:
@@ -69,6 +69,9 @@ class InstanceRegistry:
         - model="*" 的通配符实例 → 可处理任意模型（如 LM Studio 多模型后端）
         - 两者同时存在时，均返回给 balancer 做负载均衡
 
+        v4: 按 tier 排序 — LOCAL 在前，REMOTE 在后。
+            同 tier 内按 capacity_factor 降序。
+
         Args:
             model: 模型名称。
 
@@ -80,6 +83,8 @@ class InstanceRegistry:
             if (inst.model == model or inst.model == "*")
             and inst.status == InstanceStatus.HEALTHY
         ]
+        # v4: LOCAL 优先, 同 tier 内容量大的优先
+        candidates.sort(key=lambda i: (0 if i.tier == InstanceTier.LOCAL else 1, -i.capacity_factor))
         return candidates
 
     def update_status(self, instance_id: str, status: InstanceStatus) -> None:

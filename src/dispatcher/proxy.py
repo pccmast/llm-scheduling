@@ -192,6 +192,14 @@ class RoutingProxy:
                     success=True,
                 )
 
+            # v4: 性能反馈 — 回写实际 tok/s 到 balancer
+            if hasattr(self._balancer, "record_performance") and usage:
+                self._balancer.record_performance(
+                    instance.instance_id,
+                    usage.completion_tokens,
+                    inference_response.latency_ms,
+                )
+
             root_span.set_attribute("success", True)
             return inference_response
 
